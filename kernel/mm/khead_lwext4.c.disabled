@@ -1,0 +1,394 @@
+// kernel/kheap_lwext4.c
+
+#include "types.h"
+#include "param.h"
+#include <lock/lock.h>
+#include "platform.h"
+#include "defs.h"
+#include "memlayout.h"
+
+#define LWEXT4_HEAP_TOTAL_SIZE (2 * 1024 * 1024 + 4096)
+#define NUM_BUCKETS 4
+#define MIN_BLOCK_SIZE sizeof(struct free_block_header)
+
+struct bucket_params {
+    uint block_size_param;
+    uint proportion_percent;  // 使用百分比整数，例如15表示15%
+};
+
+static const struct bucket_params bucket_configs[NUM_BUCKETS] = {
+    {64, 15},    // 15%
+    {256, 35},   // 35%
+    {1024, 30},  // 30%
+    {4096, 20}   // 20%
+};
+
+static const char *bucket_debug_names[NUM_BUCKETS] = {"kheap_b64", "kheap_b256", "kheap_b1024",
+                                                      "kheap_b4096"};
+
+struct free_block_header {
+    struct free_block_header *next;
+};
+
+struct heap_bucket {
+    struct spinlock lock;
+    struct free_block_header *free_list;
+    uint block_size;
+    uint num_blocks_total;
+    uint num_blocks_free;
+    char name[32];
+    char *region_start;
+    char *region_end;
+};
+
+static char lwext4_heap_mem[LWEXT4_HEAP_TOTAL_SIZE] __attribute__((aligned(16)));
+
+static struct heap_bucket buckets[NUM_BUCKETS];
+
+static int find_best_bucket_for_alloc(uint size);
+static int find_bucket_for_free(void *ptr);
+
+// --- 初始化函数 ---
+void kheap_lwext4_init(void) {
+    char *current_alloc_ptr = lwext4_heap_mem;  // 当前用于划分给桶的堆内存指针
+    char *const heap_physical_end = lwext4_heap_mem + LWEXT4_HEAP_TOTAL_SIZE;  // 堆的总结束地址
+
+    printf("kheap_lwext4: 初始化堆，起始地址 %p，结束地址 %p (大小 %d 字节)\n", lwext4_heap_mem,
+           heap_physical_end, LWEXT4_HEAP_TOTAL_SIZE);
+
+    for (int i = 0; i < NUM_BUCKETS; ++i) {
+        struct heap_bucket *b = &buckets[i];
+        b->block_size = bucket_configs[i].block_size_param;
+
+        if (b->block_size < MIN_BLOCK_SIZE) {
+            panic("kheap_lwext4_init: 配置的 block_size 过小");
+        }
+        // 对齐考虑: 如果 block_size 需要是某个值的倍数，这里可以添加检查或调整
+        // 例如: if(b->block_size % 8 != 0) b->block_size = ((b->block_size + 7) / 8) * 8;
+
+        b->free_list = 0;
+        b->num_blocks_total = 0;
+        b->num_blocks_free = 0;
+
+        // 设置桶名称
+        if (i < NUM_BUCKETS && bucket_debug_names[i] != 0) {
+            strncpy(b->name, bucket_debug_names[i], sizeof(b->name) - 1);
+            b->name[sizeof(b->name) - 1] = '\0';  // 确保空终止
+        } else {
+            strncpy(b->name, "heap_b_unk", sizeof(b->name) - 1);  // 后备名称
+            b->name[sizeof(b->name) - 1] = '\0';
+        }
+        initlock(&b->lock, b->name);
+
+        b->region_start = current_alloc_ptr;
+        uint allocated_space_for_bucket;
+        if (i == NUM_BUCKETS - 1) {
+            allocated_space_for_bucket = heap_physical_end - current_alloc_ptr;
+        } else {
+            // 使用整数运算：(总大小 * 百分比) / 100
+            allocated_space_for_bucket =
+                (LWEXT4_HEAP_TOTAL_SIZE * bucket_configs[i].proportion_percent) / 100;
+        }
+
+        if (current_alloc_ptr + allocated_space_for_bucket > heap_physical_end) {
+            allocated_space_for_bucket = heap_physical_end - current_alloc_ptr;
+        }
+
+        // 确保桶的区域大小至少能容纳一个块，并且是块大小的整数倍（向下取整）
+        if (allocated_space_for_bucket < b->block_size) {
+            b->region_end = b->region_start;  // 没有足够空间给这个桶
+        } else {
+            uint num_potential_blocks = allocated_space_for_bucket / b->block_size;
+            b->region_end = b->region_start + (num_potential_blocks * b->block_size);
+        }
+
+        char *p = b->region_start;
+        uint blocks_in_this_region = 0;
+        while (p + b->block_size <= b->region_end) {
+            struct free_block_header *fbh = (struct free_block_header *)p;
+            fbh->next = b->free_list;
+            b->free_list = fbh;
+            blocks_in_this_region++;
+            p += b->block_size;
+        }
+        b->num_blocks_total = blocks_in_this_region;
+        b->num_blocks_free = blocks_in_this_region;
+
+        printf("kheap_lwext4: 桶 '%s' (块大小 %u) 区域 [%p, %p), 总块数 %u\n", b->name,
+               b->block_size, b->region_start, b->region_end, b->num_blocks_total);
+
+        current_alloc_ptr = b->region_end;
+    }
+
+    if (current_alloc_ptr > heap_physical_end) {
+        panic("kheap_lwext4_init: 初始化时堆空间超限");
+    }
+    if (current_alloc_ptr < heap_physical_end) {
+        printf("kheap_lwext4_init: 由于分区和对齐，堆末尾可能剩余 %ld 字节未使用\n",
+               heap_physical_end - current_alloc_ptr);
+    }
+    printf("kheap_lwext4: 初始化完成。\n");
+}
+
+// --- 分配函数 ---
+void *kalloc_lwext4(uint size) {
+    if (size == 0) {
+        return 0;
+    }
+    if (size < MIN_BLOCK_SIZE) {
+        size = MIN_BLOCK_SIZE;
+    }
+
+    int bucket_idx = find_best_bucket_for_alloc(size);
+
+    if (bucket_idx == -1) {
+        printf("kalloc_lwext4: 没有合适的桶用于请求大小 %u。最大桶块大小: %u\n", size,
+               buckets[NUM_BUCKETS - 1].block_size);
+        return 0;
+    }
+
+    struct heap_bucket *b = &buckets[bucket_idx];
+    struct free_block_header *fbh_to_alloc = 0;
+
+    acquire(&b->lock);
+    if (b->free_list) {
+        fbh_to_alloc = b->free_list;
+        b->free_list = fbh_to_alloc->next;
+        b->num_blocks_free--;
+    }
+    release(&b->lock);
+
+    if (!fbh_to_alloc) {
+        printf("kalloc_lwext4: 桶 '%s' (块大小 %u) 已空，无法满足请求大小 %u\n", b->name,
+               b->block_size, size);
+        return 0;
+    }
+    return (void *)fbh_to_alloc;
+}
+
+// --- 释放函数 ---
+void kfree_lwext4(void *ptr) {
+    if (ptr == 0) {
+        return;
+    }
+
+    if (ptr < (void *)lwext4_heap_mem ||
+        ptr >= (void *)(lwext4_heap_mem + LWEXT4_HEAP_TOTAL_SIZE)) {
+        printf("kfree_lwext4: 尝试释放指针 %p，该指针在 lwext4_heap 范围 [%p, %p) 之外\n", ptr,
+               lwext4_heap_mem, lwext4_heap_mem + LWEXT4_HEAP_TOTAL_SIZE);
+        panic("kfree_lwext4: 指针超出堆边界");
+        return;
+    }
+
+    int bucket_idx = find_bucket_for_free(ptr);
+
+    if (bucket_idx == -1) {
+        printf("kfree_lwext4: 指针 %p (在堆范围内) 不属于任何已知桶或未对齐。\n", ptr);
+        panic("kfree_lwext4: 无效指针或内部错误");  // 可能需要更详细的调试
+        return;
+    }
+
+    struct heap_bucket *b = &buckets[bucket_idx];
+    struct free_block_header *fbh_to_free = (struct free_block_header *)ptr;
+
+    acquire(&b->lock);
+    fbh_to_free->next = b->free_list;
+    b->free_list = fbh_to_free;
+    b->num_blocks_free++;
+    release(&b->lock);
+}
+
+// --- Calloc 函数 ---
+void *kcalloc_lwext4(uint nmemb, uint size) {
+    if (nmemb == 0 || size == 0) {
+        return 0;
+    }
+    uint total_size;
+    // 手动检查乘法溢出
+    if (size != 0 && nmemb > (((uint)-1) / size)) {  // ((uint)-1) 是 uint 的最大值
+        printf("kcalloc_lwext4: 乘法溢出 (%u * %u)\n", nmemb, size);
+        return 0;
+    }
+    total_size = nmemb * size;
+
+    void *ptr = kalloc_lwext4(total_size);
+    if (ptr) {
+        memset(ptr, 0, total_size);
+    }
+    return ptr;
+}
+
+// --- 辅助函数: 查找用于分配的最佳桶 ---
+static int find_best_bucket_for_alloc(uint size) {
+    int best_idx = -1;
+    uint current_best_bucket_size = (uint)-1;  // 初始化为一个非常大的数
+
+    for (int i = 0; i < NUM_BUCKETS; ++i) {
+        if (buckets[i].block_size >= size) {  // 当前桶能容纳请求
+            if (buckets[i].block_size <
+                current_best_bucket_size) {  // 并且比之前找到的更小（更贴合）
+                current_best_bucket_size = buckets[i].block_size;
+                best_idx = i;
+            }
+        }
+    }
+    return best_idx;
+}
+
+// --- 辅助函数: 根据要释放的指针查找其所属的桶 ---
+static int find_bucket_for_free(void *ptr) {
+    char *p_char = (char *)ptr;
+    for (int i = 0; i < NUM_BUCKETS; ++i) {
+        struct heap_bucket *b = &buckets[i];
+        if (p_char >= b->region_start && p_char < b->region_end) {
+            // 指针在桶的内存区域内，现在检查它是否是该桶中一个块的合法起始地址
+            if (((uint64)p_char - (uint64)b->region_start) % b->block_size == 0) {
+                return i;
+            }
+        }
+    }
+    return -1;  // 未找到或未对齐
+}
+
+void kheap_lwext4_stats(void) {
+    printf("lwext4 堆统计信息 (总堆大小: %d 字节):\n", LWEXT4_HEAP_TOTAL_SIZE);
+    for (int i = 0; i < NUM_BUCKETS; ++i) {
+        struct heap_bucket *b = &buckets[i];
+        acquire(&b->lock);
+        printf("  桶 '%s' (块大小 %u): 总块数 %u, 空闲块 %u, 已用块 %u, 区域 [%p, %p)\n", b->name,
+               b->block_size, b->num_blocks_total, b->num_blocks_free,
+               b->num_blocks_total - b->num_blocks_free, b->region_start, b->region_end);
+        release(&b->lock);
+    }
+}
+
+void test_kheap_lwext4(void) {
+    void *p1, *p2, *p3, *p4, *p_large;
+    void *arr[10];  // 用于测试多次分配和释放
+
+    printf("--- 开始 kheap_lwext4 单元测试 ---\n");
+    kheap_lwext4_stats();  // 初始状态
+
+    // 1. 基本分配和释放 (测试小桶)
+    printf("\n[测试1: 基本分配与释放]\n");
+    p1 = kalloc_lwext4(30);  // 应从 64B 桶分配
+    if (p1) {
+        printf("  kalloc_lwext4(30) -> %p (来自 64B 桶)\n", p1);
+        // ((char*)p1)[0] = 'A'; ((char*)p1)[30] = 'B'; ((char*)p1)[63] = 'C';
+    } else {
+        printf("  kalloc_lwext4(30) 失败!\n");
+    }
+    kheap_lwext4_stats();
+
+    kfree_lwext4(p1);
+    printf("  kfree_lwext4(%p)\n", p1);
+    kheap_lwext4_stats();
+
+    p2 = kalloc_lwext4(30);  // 应该复用 p1 的空间
+    if (p2 == p1) {
+        printf("  kalloc_lwext4(30) -> %p (成功复用内存)\n", p2);
+    } else {
+        printf("  kalloc_lwext4(30) -> %p (未复用内存或 p1 分配失败)\n", p2);
+    }
+    kfree_lwext4(p2);
+    kheap_lwext4_stats();
+
+    // 2. 测试不同桶的分配
+    printf("\n[测试2: 不同桶的分配]\n");
+    p1 = kalloc_lwext4(60);    // 64B 桶
+    p2 = kalloc_lwext4(200);   // 256B 桶
+    p3 = kalloc_lwext4(1000);  // 1024B 桶
+    p4 = kalloc_lwext4(4000);  // 4096B 桶
+    printf("  kalloc_lwext4(60)   -> %p\n", p1);
+    printf("  kalloc_lwext4(200)  -> %p\n", p2);
+    printf("  kalloc_lwext4(1000) -> %p\n", p3);
+    printf("  kalloc_lwext4(4000) -> %p\n", p4);
+    kheap_lwext4_stats();
+    kfree_lwext4(p1);
+    kfree_lwext4(p2);
+    kfree_lwext4(p3);
+    kfree_lwext4(p4);
+    kheap_lwext4_stats();
+
+    // 3. 测试 kcalloc_lwext4 (清零)
+    printf("\n[测试3: kcalloc_lwext4 清零测试]\n");
+    p1 = kcalloc_lwext4(1, 70);  // 分配 70 字节并清零，应从 256B 桶（或下一个更大的）
+    if (p1) {
+        printf("  kcalloc_lwext4(1, 70) -> %p\n", p1);
+        int zeroed = 1;
+        for (int i = 0; i < buckets[find_best_bucket_for_alloc(70)].block_size;
+             ++i) {  // 检查整个分配的块
+            if (((char *)p1)[i] != 0) {
+                zeroed = 0;
+                printf("  错误: kcalloc_lwext4 未将字节 %d 清零!\n", i);
+                break;
+            }
+        }
+        if (zeroed) printf("  kcalloc_lwext4 内存已正确清零。\n");
+        kfree_lwext4(p1);
+    } else {
+        printf("  kcalloc_lwext4(1, 70) 失败!\n");
+    }
+    kheap_lwext4_stats();
+
+    // 4. 耗尽一个小桶
+    printf("\n[测试4: 耗尽一个桶 (64B)]\n");
+    int bucket_64b_idx = find_best_bucket_for_alloc(MIN_BLOCK_SIZE);  // 假设 64B 是最小的
+    if (bucket_64b_idx != -1 && buckets[bucket_64b_idx].block_size == 64) {
+        uint initial_free = buckets[bucket_64b_idx].num_blocks_free;
+        printf("  桶 '%s' 初始空闲块: %d\n", buckets[bucket_64b_idx].name, initial_free);
+        int count = 0;
+        for (int i = 0; i < initial_free + 5; ++i) {  // 尝试分配比初始空闲块多一点
+            arr[i % 10] = kalloc_lwext4(64);          // 使用 arr 临时存储，防止编译器优化掉分配
+            if (arr[i % 10]) {
+                count++;
+            } else {
+                printf("  在第 %d 次分配时桶耗尽 (预期在 %d 次左右)。\n", count + 1, initial_free);
+                break;
+            }
+        }
+        printf("  成功从 64B 桶分配了 %d 个块。\n", count);
+        kheap_lwext4_stats();
+        // 释放这些块 (如果 arr[i%10] 不是测试的核心，可以简化这部分)
+        for (int i = 0; i < count; ++i) {
+            // 需要一种方式来取回分配的指针，或者在分配时就存好
+            // 这里简化：假设我们只释放最后分配的几个
+            if (i < 10 && arr[i]) kfree_lwext4(arr[i]);
+        }
+        // 为了简化，我们假设上面循环中，如果 arr[i%10] 会覆盖，
+        // 但这不是一个好的测试来验证所有块都被正确释放并能再次使用。
+        // 一个更好的方法是分配到链表中，然后从链表中释放。
+        // 暂时，我们只验证耗尽和统计。
+    } else {
+        printf("  未能定位到 64B 桶进行耗尽测试。\n");
+    }
+    kheap_lwext4_stats();
+
+    // 5. 边界条件测试
+    printf("\n[测试5: 边界条件]\n");
+    p1 = kalloc_lwext4(0);
+    printf("  kalloc_lwext4(0) -> %p (预期为 0)\n", p1);
+    if (p1 != 0) panic("kalloc(0) failed");
+
+    p1 = kalloc_lwext4(MIN_BLOCK_SIZE - 1);  // 应分配 MIN_BLOCK_SIZE
+    printf("  kalloc_lwext4(MIN_BLOCK_SIZE-1) -> %p (预期非0, 实际分配MIN_BLOCK_SIZE)\n", p1);
+    if (!p1) panic("kalloc(MIN_BLOCK_SIZE-1) failed");
+    kfree_lwext4(p1);
+
+    p_large = kalloc_lwext4(LWEXT4_HEAP_TOTAL_SIZE + 100);  // 超出总堆大小，或最大桶
+    printf("  kalloc_lwext4(超大) -> %p (预期为 0)\n", p_large);
+    if (p_large != 0) panic("kalloc(too large) failed");
+
+    kfree_lwext4(0);
+    printf("  kfree_lwext4(0) (预期无事发生)\n");
+
+    // 测试释放堆外指针 (会导致panic)
+    // char stack_var;
+    // printf("  测试释放栈地址 (预期 panic)...\n");
+    // kfree_lwext4(&stack_var); // 这会 panic，测试时可以取消注释一次，然后注释掉
+
+    printf("\n--- kheap_lwext4 单元测试结束 ---\n");
+    // 在这里可以加一个 panic("单元测试完成并通过检查点")，
+    // 这样QEMU会停在这里，方便你看输出。
+    // 或者让它继续启动到shell。
+}

@@ -1,0 +1,13 @@
+*~
+_*
+*.o
+*.d
+*.asm
+*.sym
+*.img
+.gdbinit
+.vscode/
+basic/user/build/
+riscv-vf2/
+.judge_tmp_offline/
+2k1000la/

@@ -1,0 +1,15 @@
+entry("brk");
+entry("mmap");
+entry("munmap");
+entry("times");
+entry("uname");
+entry("sched_yield");
+entry("gettimeofday");
+entry("nanosleep");
+entry("kill");
+entry("tkill");
+entry("tgkill");
+entry("rt_sigaction");
+entry("rt_sigprocmask");
+entry("rt_sigtimedwait");
+entry("rt_sigreturn"); 

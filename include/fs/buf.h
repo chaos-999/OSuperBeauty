@@ -1,0 +1,18 @@
+#ifndef _BUF_H
+#define _BUF_H
+
+struct buf {
+    int valid;  // has data been read from disk?
+    int disk;   // does disk "own" buf?
+    uint dev;
+    uint blockno;
+    struct sleeplock lock;
+    uint refcnt;
+    struct buf *prev;  // LRU cache list
+    struct buf *next;
+    uchar data[BSIZE];
+};
+
+struct buf *bget(uint dev, uint sectorno);
+
+#endif  // _BUF_H
