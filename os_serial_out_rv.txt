@@ -1,0 +1,400 @@
+qemu-system-riscv64 -machine virt -kernel kernel-rv -m 1G -nographic -smp 1 -bios default -drive file=sdcard-rv.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 -no-reboot -device virtio-net-device,netdev=net -netdev user,id=net -rtc base=utc 
+
+OpenSBI v1.5.1
+   ____                    _____ ____ _____
+  / __ \                  / ____|  _ \_   _|
+ | |  | |_ __   ___ _ __ | (___ | |_) || |
+ | |  | | '_ \ / _ \ '_ \ \___ \|  _ < | |
+ | |__| | |_) |  __/ | | |____) | |_) || |_
+  \____/| .__/ \___|_| |_|_____/|____/_____|
+        | |
+        |_|
+
+Platform Name             : riscv-virtio,qemu
+Platform Features         : medeleg
+Platform HART Count       : 1
+Platform IPI Device       : aclint-mswi
+Platform Timer Device     : aclint-mtimer @ 10000000Hz
+Platform Console Device   : uart8250
+Platform HSM Device       : ---
+Platform PMU Device       : ---
+Platform Reboot Device    : syscon-reboot
+Platform Shutdown Device  : syscon-poweroff
+Platform Suspend Device   : ---
+Platform CPPC Device      : ---
+Firmware Base             : 0x80000000
+Firmware Size             : 327 KB
+Firmware RW Offset        : 0x40000
+Firmware RW Size          : 71 KB
+Firmware Heap Offset      : 0x49000
+Firmware Heap Size        : 35 KB (total), 2 KB (reserved), 11 KB (used), 21 KB (free)
+Firmware Scratch Size     : 4096 B (total), 416 B (used), 3680 B (free)
+Runtime SBI Version       : 2.0
+
+Domain0 Name              : root
+Domain0 Boot HART         : 0
+Domain0 HARTs             : 0*
+Domain0 Region00          : 0x0000000000100000-0x0000000000100fff M: (I,R,W) S/U: (R,W)
+Domain0 Region01          : 0x0000000010000000-0x0000000010000fff M: (I,R,W) S/U: (R,W)
+Domain0 Region02          : 0x0000000002000000-0x000000000200ffff M: (I,R,W) S/U: ()
+Domain0 Region03          : 0x0000000080040000-0x000000008005ffff M: (R,W) S/U: ()
+Domain0 Region04          : 0x0000000080000000-0x000000008003ffff M: (R,X) S/U: ()
+Domain0 Region05          : 0x000000000c400000-0x000000000c5fffff M: (I,R,W) S/U: (R,W)
+Domain0 Region06          : 0x000000000c000000-0x000000000c3fffff M: (I,R,W) S/U: (R,W)
+Domain0 Region07          : 0x0000000000000000-0xffffffffffffffff M: () S/U: (R,W,X)
+Domain0 Next Address      : 0x0000000080200000
+Domain0 Next Arg1         : 0x00000000bfe00000
+Domain0 Next Mode         : S-mode
+Domain0 SysReset          : yes
+Domain0 SysSuspend        : yes
+
+Boot HART ID              : 0
+Boot HART Domain          : root
+Boot HART Priv Version    : v1.12
+Boot HART Base ISA        : rv64imafdch
+Boot HART ISA Extensions  : sstc,zicntr,zihpm,zicboz,zicbom,sdtrig,svadu
+Boot HART PMP Count       : 16
+Boot HART PMP Granularity : 2 bits
+Boot HART PMP Address Bits: 54
+Boot HART MHPM Info       : 16 (0x0007fff8)
+Boot HART Debug Triggers  : 2 triggers
+Boot HART MIDELEG         : 0x0000000000001666
+Boot HART MEDELEG         : 0x0000000000f0b509
+Hello OpenSBI hartid=0
+
+
+[1m[95m░▒▓███████▓▒░▒▓███████▓▒░░▒▓███████▓▒░░▒▓█▓▒░▒▓███████▓▒░ ░▒▓██████▓▒░ ░▒▓██████▓▒░ ░▒▓███████▓▒░ 
+[0m[1m[95m░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░        
+[0m[1m[95m░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░        
+[0m[1m[95m ░▒▓██████▓▒░░▒▓███████▓▒░░▒▓███████▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒▒▓███▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓██████▓▒░  
+[0m[1m[95m       ░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░ 
+[0m[1m[95m       ░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░ 
+[0m[1m[95m░▒▓███████▓▒░░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓██████▓▒░ ░▒▓██████▓▒░░▒▓███████▓▒░  
+[0m[1m[95m                                                                                                   
+[0m[1m[95m                                                                                                   
+[0m
+buddy_init: memory range [0x00000000802d4000, 0x0000000088000000), size=125 MB, level=15, managing=128 MB
+kvminithart come here
+kvminithart finish first sfence_vma
+Current stack pointer: 8023f030
+etext: 8022e000, PHYSTOP: 88000000
+kvminithart finish w_satp
+kvminithart finish second sfence_vma
+init_fs_table finished
+inodeinit: NINODE=50, all i_valid=0
+sz: 8895
+[IRQ] UART0_IRQ received
+fs_init done
+vfs_ext4_blockdev_init: ph_bsize=512, ph_bcnt=8388608
+ext4_device_register ok for 'virtio_disk'
+fs_mount done: 0
+
+===== SpringOS Auto Test Runner =====
+
+before chdir basic-glibc
+after chdir basic-glibc
+#### OS COMP TEST GROUP START basic-glibc ####
+========== START test_brk ==========
+Before alloc,heap pos: 12288
+After alloc,heap pos: 12352
+Alloc again,heap pos: 12416
+========== END test_brk ==========
+========== START test_chdir ==========
+chdir ret: 0
+  current working dir : /glibc/basic/test_chdir
+========== END test_chdir ==========
+========== START test_clone ==========
+  Child says successfully!
+clone process successfully.
+pid:5
+========== END test_clone ==========
+========== START test_close ==========
+  close 3 success.
+========== END test_close ==========
+========== START test_dup ==========
+  new fd is 3.
+========== END test_dup ==========
+========== START test_dup2 ==========
+  from fd 100
+========== END test_dup2 ==========
+========== START test_execve ==========
+  I am test_echo.
+execve success.
+========== END main ==========
+========== START test_exit ==========
+exit OK.
+========== END test_exit ==========
+========== START test_fork ==========
+  child process.
+  parent process. wstatus:0
+========== END test_fork ==========
+========== START test_fstat ==========
+fstat ret: 0
+fstat: dev: 1, inode: 131106, mode: 33188, nlink: 1, size: 52, atime: 0, mtime: 0, ctime: 0
+========== END test_fstat ==========
+========== START test_getcwd ==========
+getcwd: /glibc/basic successfully!
+========== END test_getcwd ==========
+========== START test_getdents ==========
+open fd:3
+getdents fd:488
+getdents success.
+.
+
+========== END test_getdents ==========
+========== START test_getpid ==========
+getpid success.
+pid = 17
+========== END test_getpid ==========
+========== START test_getppid ==========
+  getppid success. ppid : 1
+========== END test_getppid ==========
+========== START test_gettimeofday ==========
+gettimeofday success.
+start:39296861, end:39296911
+interval: 50
+========== END test_gettimeofday ==========
+========== START test_mkdir ==========
+mkdir ret: 0
+  mkdir success.
+========== END test_mkdir ==========
+========== START test_mount ==========
+Mounting dev:/dev/vda2 to ./mnt
+mount return: 0
+mount successfully
+umount return: 0
+========== END test_mount ==========
+========== START test_open ==========
+Hi, this is a text file.
+syscalls testing success!
+
+========== END test_open ==========
+========== START test_openat ==========
+open dir fd: 3
+openat fd: 4
+openat success.
+========== END test_openat ==========
+========== START test_pipe ==========
+cpid: 25
+cpid: 0
+  Write to pipe successfully.
+
+========== END test_pipe ==========
+========== START test_read ==========
+Hi, this is a text file.
+syscalls testing success!
+
+========== END test_read ==========
+========== START test_sleep ==========
+sleep success.
+========== END test_sleep ==========
+========== START test_times ==========
+mytimes success
+{tms_utime:12, tms_stime:6, tms_cutime:0, tms_cstime:0}
+========== END test_times ==========
+========== START test_umount ==========
+Mounting dev:/dev/vda2 to ./mnt
+mount return: 0
+umount success.
+return: 0
+========== END test_umount ==========
+========== START test_uname ==========
+Uname: SpringOS SpringOS-node 4.19.0 SpringOS-riscv riscv64 
+========== END test_uname ==========
+========== START test_unlink ==========
+  unlink success!
+========== END test_unlink ==========
+========== START test_wait ==========
+This is child process
+wait child success.
+wstatus: 0
+========== END test_wait ==========
+========== START test_waitpid ==========
+This is child process
+waitpid successfully.
+wstatus: 3
+========== END test_waitpid ==========
+========== START test_write ==========
+Hello operating system contest.
+========== END test_write ==========
+========== START test_yield ==========
+  I am child process: 38. iteration 0.
+   I am child process: 40. iteration 2.
+  I am child process: 38. iteration 0.
+ I am child process: 39. iteration 1.
+  I am child process: 40. iteration 2.
+  I am child process: 38. iteration 0.
+  I am child process: 39. iteration 1.
+  I am child process: 40. iteration 2  I am child process: 38. iteration 0.
+  I am child process: 39. iteration 1.
+.
+  I am child process: 38. iteration 0.
+  I am child process: 39. iteration 1.
+  I am child process: 40. iteration 2.
+  I am child process: 39. iterati  I am child process: 40. iteration 2.
+on 1.
+========== END test_yield ==========
+========== START test_mmap ==========
+file len: 27
+mmap content:   Hello, mmap successfully!
+========== END test_mmap ==========
+========== START test_munmap ==========
+file len: 27
+munmap return: 0
+munmap successfully!
+========== END test_munmap ==========
+#### OS COMP TEST GROUP END basic-glibc ####
+#### OS COMP TEST GROUP START basic-musl ####
+========== START test_brk ==========
+Before alloc,heap pos: 12288
+After alloc,heap pos: 12352
+Alloc again,heap pos: 12416
+========== END test_brk ==========
+========== START test_chdir ==========
+chdir ret: 0
+  current working dir : /musl/basic/test_chdir
+========== END test_chdir ==========
+========== START test_clone ==========
+  Child says successfully!
+clone process successfully.
+pid:46
+========== END test_clone ==========
+========== START test_close ==========
+  close 3 success.
+========== END test_close ==========
+========== START test_dup ==========
+  new fd is 3.
+========== END test_dup ==========
+========== START test_dup2 ==========
+  from fd 100
+========== END test_dup2 ==========
+========== START test_execve ==========
+  I am test_echo.
+execve success.
+========== END main ==========
+========== START test_exit ==========
+exit OK.
+========== END test_exit ==========
+========== START test_fork ==========
+  child process.
+  parent process. wstatus:0
+========== END test_fork ==========
+========== START test_fstat ==========
+fstat ret: 0
+fstat: dev: 1, inode: 45, mode: 33188, nlink: 1, size: 52, atime: 0, mtime: 0, ctime: 0
+========== END test_fstat ==========
+========== START test_getcwd ==========
+getcwd: /musl/basic successfully!
+========== END test_getcwd ==========
+========== START test_getdents ==========
+open fd:3
+getdents fd:488
+getdents success.
+.
+
+========== END test_getdents ==========
+========== START test_getpid ==========
+getpid success.
+pid = 58
+========== END test_getpid ==========
+========== START test_getppid ==========
+  getppid success. ppid : 1
+========== END test_getppid ==========
+========== START test_gettimeofday ==========
+gettimeofday success.
+start:39298857, end:39298912
+interval: 55
+========== END test_gettimeofday ==========
+========== START test_mkdir ==========
+mkdir ret: 0
+  mkdir success.
+========== END test_mkdir ==========
+========== START test_mount ==========
+Mounting dev:/dev/vda2 to ./mnt
+mount return: 0
+mount successfully
+umount return: 0
+========== END test_mount ==========
+========== START test_open ==========
+Hi, this is a text file.
+syscalls testing success!
+
+========== END test_open ==========
+========== START test_openat ==========
+open dir fd: 3
+openat fd: 4
+openat success.
+========== END test_openat ==========
+========== START test_pipe ==========
+cpid: 66
+cpid: 0
+  Write to pipe successfully.
+
+========== END test_pipe ==========
+========== START test_read ==========
+Hi, this is a text file.
+syscalls testing success!
+
+========== END test_read ==========
+========== START test_sleep ==========
+sleep success.
+========== END test_sleep ==========
+========== START test_times ==========
+mytimes success
+{tms_utime:30, tms_stime:15, tms_cutime:0, tms_cstime:0}
+========== END test_times ==========
+========== START test_umount ==========
+Mounting dev:/dev/vda2 to ./mnt
+mount return: 0
+umount success.
+return: 0
+========== END test_umount ==========
+========== START test_uname ==========
+Uname: SpringOS SpringOS-node 4.19.0 SpringOS-riscv riscv64 
+========== END test_uname ==========
+========== START test_unlink ==========
+  unlink success!
+========== END test_unlink ==========
+========== START test_wait ==========
+This is child process
+wait child success.
+wstatus: 0
+========== END test_wait ==========
+========== START test_waitpid ==========
+This is child process
+waitpid successfully.
+wstatus: 3
+========== END test_waitpid ==========
+========== START test_write ==========
+Hello operating system contest.
+========== END test_write ==========
+========== START test_yield ==========
+  I am child process: 79. iteration 0.
+  I am child process: 80. iteration 1.
+  I am child process: 81. iteration 2.
+  I am child process: 79  I am child process: 80. iteration 1.
+  I am child process: 81. iteration 2.
+. iteration 0.
+  I am child process: 80. iteration 1.
+  I am child process: 81. iteration 2.
+  I am child process: 79. iteration 0.
+  I am child process: 80. iteration 1.
+  I am child process: 81. iteration 2  I am child process: 79. iteration 0.
+  I am child process: 80. iteration 1.
+.
+  I am child process: 79. iteration 0.
+  I am child process: 81. iteration 2.
+========== END test_yield ==========
+========== START test_mmap ==========
+file len: 27
+mmap content:   Hello, mmap successfully!
+========== END test_mmap ==========
+========== START test_munmap ==========
+file len: 27
+munmap return: 0
+munmap successfully!
+========== END test_munmap ==========
+#### OS COMP TEST GROUP END basic-musl ####
+
+All tests completed, shutting down system...
+Shutdown system call invoked, shutting down xv6...

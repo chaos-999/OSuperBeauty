@@ -1,0 +1,368 @@
+qemu-system-loongarch64 -kernel kernel-la -m 1G -nographic -smp 1 -drive file=sdcard-la.img,if=none,format=raw,id=x0 -device virtio-blk-pci,drive=x0 -no-reboot -device virtio-net-pci,netdev=net0 -netdev user,id=net0 -rtc base=utc 
+
+[1m[95m██████  ██▓███   ██▀███   ██▓ ███▄    █   ▄████  ▒█████    ██████ 
+[0m[1m[95m▒██    ▒ ▓██░  ██▒▓██ ▒ ██▒▓██▒ ██ ▀█   █  ██▒ ▀█▒▒██▒  ██▒▒██    ▒ 
+[0m[1m[95m░ ▓██▄   ▓██░ ██▓▒▓██ ░▄█ ▒▒██▒▓██  ▀█ ██▒▒██░▄▄▄░▒██░  ██▒░ ▓██▄   
+[0m[1m[95m  ▒   ██▒▒██▄█▓▒ ▒▒██▀▀█▄  ░██░▓██▒  ▐▌██▒░▓█  ██▓▒██   ██░  ▒   ██▒
+[0m[1m[95m▒██████▒▒▒██▒ ░  ░░██▓ ▒██▒░██░▒██░   ▓██░░▒▓███▀▒░ ████▓▒░▒██████▒▒
+[0m[1m[95m▒ ▒▓▒ ▒ ░▒▓▒░ ░  ░░ ▒▓ ░▒▓░░▓  ░ ▒░   ▒ ▒  ░▒   ▒ ░ ▒░▒░▒░ ▒ ▒▓▒ ▒ ░
+[0m[1m[95m░ ░▒  ░ ░░▒ ░       ░▒ ░ ▒░ ▒ ░░ ░░   ░ ▒░  ░   ░   ░ ▒ ▒░ ░ ░▒  ░ ░
+[0m[1m[95m░  ░  ░  ░░         ░░   ░  ▒ ░   ░   ░ ░ ░ ░   ░ ░ ░ ░ ▒  ░  ░  ░  
+[0m[1m[95m      ░              ░      ░           ░       ░     ░ ░        ░  
+[0m[1m[95m                                                                    
+[0m
+0 16 0
+buddy_init: memory range [0x9000000090000000, 0x90000000b0000000), size=512 MB, level=17, managing=512 MB
+init_fs_table finished
+inodeinit: NINODE=50, all i_valid=0
+found modern virtio pci device.
+use_msix: 0
+common cfg mapped at: 0x0000000040000000
+isr cfg mapped at: 0x0000000040001000
+device cfg mapped at: 0x0000000040002000
+notify base: 0x0000000040003000, notify off multiplier: 4
+queue_0 max size: 256
+sz: 11384
+fs_init done
+vfs_ext4_blockdev_init: ph_bsize=512, ph_bcnt=8388608
+ext4_device_register ok for 'virtio_disk'
+fs_mount done: 0
+before chdir basic-glibc
+after chdir basic-glibc
+#### OS COMP TEST GROUP START basic-glibc ####
+========== START test_brk ==========
+Before alloc,heap pos: 12288
+After alloc,heap pos: 12352
+Alloc again,heap pos: 12416
+========== END test_brk ==========
+========== START test_chdir ==========
+chdir ret: 0
+  current working dir : /glibc/basic/test_chdir
+========== END test_chdir ==========
+========== START test_clone ==========
+  Child says successfully!
+clone process successfully.
+pid:5
+========== END test_clone ==========
+========== START test_close ==========
+  close 3 success.
+========== END test_close ==========
+========== START test_dup ==========
+  new fd is 3.
+========== END test_dup ==========
+========== START test_dup2 ==========
+  from fd 100
+========== END test_dup2 ==========
+========== START test_execve ==========
+  I am test_echo.
+execve success.
+========== END main ==========
+========== START test_exit ==========
+exit OK.
+========== END test_exit ==========
+========== START test_fork ==========
+  child process.
+  parent process. wstatus:0
+========== END test_fork ==========
+========== START test_fstat ==========
+fstat ret: 0
+fstat: dev: 0, inode: 131110, mode: 33188, nlink: 1, size: 52, atime: 0, mtime: 0, ctime: 0
+========== END test_fstat ==========
+========== START test_getcwd ==========
+getcwd: /glibc/basic successfully!
+========== END test_getcwd ==========
+========== START test_getdents ==========
+open fd:3
+getdents fd:488
+getdents success.
+.
+
+========== END test_getdents ==========
+========== START test_getpid ==========
+getpid success.
+pid = 17
+========== END test_getpid ==========
+========== START test_getppid ==========
+  getppid success. ppid : 1
+========== END test_getppid ==========
+========== START test_gettimeofday ==========
+gettimeofday success.
+start:39301658, end:39302174
+interval: 516
+========== END test_gettimeofday ==========
+========== START test_mkdir ==========
+mkdir ret: 0
+  mkdir success.
+========== END test_mkdir ==========
+========== START test_mount ==========
+Mounting dev:/dev/vda2 to ./mnt
+mount return: 0
+mount successfully
+umount return: 0
+========== END test_mount ==========
+========== START test_open ==========
+Hi, this is a text file.
+syscalls testing success!
+
+========== END test_open ==========
+========== START test_openat ==========
+open dir fd: 3
+openat fd: 4
+openat success.
+========== END test_openat ==========
+========== START test_pipe ==========
+cpid: 25
+cpid: 0
+  Write to pipe successfully.
+
+========== END test_pipe ==========
+========== START test_read ==========
+Hi, this is a text file.
+syscalls testing success!
+
+========== END test_read ==========
+========== START test_sleep ==========
+sleep success.
+========== END test_sleep ==========
+========== START test_times ==========
+mytimes success
+{tms_utime:1, tms_stime:0, tms_cutime:0, tms_cstime:0}
+========== END test_times ==========
+========== START test_umount ==========
+Mounting dev:/dev/vda2 to ./mnt
+mount return: 0
+umount success.
+return: 0
+========== END test_umount ==========
+========== START test_uname ==========
+Uname: SpringOS SpringOS-node 4.19.0 SpringOS-loongarch loongarch64 
+========== END test_uname ==========
+========== START test_unlink ==========
+  unlink success!
+========== END test_unlink ==========
+========== START test_wait ==========
+This is child process
+wait child success.
+wstatus: 0
+========== END test_wait ==========
+========== START test_waitpid ==========
+This is child process
+waitpid successfully.
+wstatus: 3
+========== END test_waitpid ==========
+========== START test_write ==========
+Hello operating system contest.
+========== END test_write ==========
+========== START test_yield ==========
+  I am child process: 38. iteration 0.
+  I am child process: 39. iteration 1.
+  I am child process: 40. iteration 2.
+  I am child process: 38. iteration 0.
+  I am child process: 39. iteration 1.
+  I am child process: 40. iteration 2.
+  I am child process: 38. iteration 0.
+  I am child process: 39. iteration 1.
+  I am child process: 40. iteration 2.
+  I am child process: 38. iteration 0.
+  I am child process: 39. iteration 1.
+  I am child process: 40. iteration 2.
+  I am child process: 38. iteration 0.
+  I am child process: 39. iteration 1.
+  I am child process: 40. iteration 2.
+========== END test_yield ==========
+========== START test_mmap ==========
+file len: 27
+mmap content:   Hello, mmap successfully!
+========== END test_mmap ==========
+========== START test_munmap ==========
+file len: 4096
+munmap return: 0
+munmap successfully!
+========== END test_munmap ==========
+#### OS COMP TEST GROUP END basic-glibc ####
+#### OS COMP TEST GROUP START basic-musl ####
+========== START test_brk ==========
+Before alloc,heap pos: 12288
+After alloc,heap pos: 12352
+Alloc again,heap pos: 12416
+========== END test_brk ==========
+========== START test_chdir ==========
+chdir ret: 0
+  current working dir : /musl/basic/test_chdir
+========== END test_chdir ==========
+========== START test_clone ==========
+  Child says successfully!
+clone process successfully.
+pid:46
+========== END test_clone ==========
+========== START test_close ==========
+  close 3 success.
+========== END test_close ==========
+========== START test_dup ==========
+  new fd is 3.
+========== END test_dup ==========
+========== START test_dup2 ==========
+  from fd 100
+========== END test_dup2 ==========
+========== START test_execve ==========
+  I am test_echo.
+execve success.
+========== END main ==========
+========== START test_exit ==========
+exit OK.
+========== END test_exit ==========
+========== START test_fork ==========
+  child process.
+  parent process. wstatus:0
+========== END test_fork ==========
+========== START test_fstat ==========
+fstat ret: 0
+fstat: dev: 0, inode: 49, mode: 33188, nlink: 1, size: 52, atime: 0, mtime: 0, ctime: 0
+========== END test_fstat ==========
+========== START test_getcwd ==========
+getcwd: /musl/basic successfully!
+========== END test_getcwd ==========
+========== START test_getdents ==========
+open fd:3
+getdents fd:488
+getdents success.
+.
+
+========== END test_getdents ==========
+========== START test_getpid ==========
+getpid success.
+pid = 58
+========== END test_getpid ==========
+========== START test_getppid ==========
+  getppid success. ppid : 1
+========== END test_getppid ==========
+========== START test_gettimeofday ==========
+gettimeofday success.
+start:39329826, end:39330385
+interval: 559
+========== END test_gettimeofday ==========
+========== START test_mkdir ==========
+mkdir ret: 0
+  mkdir success.
+========== END test_mkdir ==========
+========== START test_mount ==========
+Mounting dev:/dev/vda2 to ./mnt
+mount return: 0
+mount successfully
+umount return: 0
+========== END test_mount ==========
+========== START test_open ==========
+Hi, this is a text file.
+syscalls testing success!
+
+========== END test_open ==========
+========== START test_openat ==========
+open dir fd: 3
+openat fd: 4
+openat success.
+========== END test_openat ==========
+========== START test_pipe ==========
+cpid: 66
+cpid: 0
+  Write to pipe successfully.
+
+========== END test_pipe ==========
+========== START test_read ==========
+Hi, this is a text file.
+syscalls testing success!
+
+========== END test_read ==========
+========== START test_sleep ==========
+sleep success.
+========== END test_sleep ==========
+========== START test_times ==========
+mytimes success
+{tms_utime:3, tms_stime:1, tms_cutime:0, tms_cstime:0}
+========== END test_times ==========
+========== START test_umount ==========
+Mounting dev:/dev/vda2 to ./mnt
+mount return: 0
+umount success.
+return: 0
+========== END test_umount ==========
+========== START test_uname ==========
+Uname: SpringOS SpringOS-node 4.19.0 SpringOS-loongarch loongarch64 
+========== END test_uname ==========
+========== START test_unlink ==========
+  unlink success!
+========== END test_unlink ==========
+========== START test_wait ==========
+This is child process
+wait child success.
+wstatus: 0
+========== END test_wait ==========
+========== START test_waitpid ==========
+This is child process
+waitpid successfully.
+wstatus: 3
+========== END test_waitpid ==========
+========== START test_write ==========
+Hello operating system contest.
+========== END test_write ==========
+========== START test_yield ==========
+  I am child process: 79. iteration 0.
+  I am child process: 80. iteration 1.
+  I am child process: 81. iteration 2.
+  I am child process: 79. iteration 0.
+  I am child process: 80. iteration 1.
+  I am child process: 81. iteration 2.
+  I am child process: 79. iteration 0.
+  I am child process: 80. iteration 1.
+  I am child process: 81. iteration 2.
+  I am child p  I am child process: 80. iteration 1.
+  I am child process: 81. iteration 2.
+rocess: 79. iteration 0.
+  I am child process: 80. iteration 1.
+  I am child process: 81. iteration 2.
+  I am child process: 79. iteration 0.
+========== END test_yield ==========
+========== START test_mmap ==========
+file len: 27
+mmap content:   Hello, mmap successfully!
+========== END test_mmap ==========
+========== START test_munmap ==========
+file len: 4096
+munmap return: 0
+munmap successfully!
+========== END test_munmap ==========
+#### OS COMP TEST GROUP END basic-musl ####
+#### OS COMP TEST GROUP START interrupts-musl ####
+namei failed
+namei failed
+#### OS COMP TEST GROUP END interrupts-musl ####
+#### OS COMP TEST GROUP START interrupts-glibc ####
+namei failed
+namei failed
+#### OS COMP TEST GROUP END interrupts-glibc ####
+#### OS COMP TEST GROUP START copyfilerange-musl ####
+namei failed
+namei failed
+namei failed
+namei failed
+#### OS COMP TEST GROUP END copyfilerange-musl ####
+#### OS COMP TEST GROUP START copyfilerange-glibc ####
+namei failed
+namei failed
+namei failed
+namei failed
+#### OS COMP TEST GROUP END copyfilerange-glibc ####
+#### OS COMP TEST GROUP START splice-musl ####
+namei failed
+namei failed
+namei failed
+namei failed
+namei failed
+#### OS COMP TEST GROUP END splice-musl ####
+#### OS COMP TEST GROUP START splice-glibc ####
+namei failed
+namei failed
+namei failed
+namei failed
+namei failed
+#### OS COMP TEST GROUP END splice-glibc ####
+All tests completed, shutting down system...
