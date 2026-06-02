@@ -13,10 +13,6 @@ K_ASM_RV := $(wildcard $K/*/rv/*.S) $(wildcard $K/*/*/rv/*.S)
 K_SRC_LA := $(wildcard $K/*/la/*.c) $(wildcard $K/*/*/la/*.c)
 K_ASM_LA := $(wildcard $K/*/la/*.S) $(wildcard $K/*/*/la/*.S)
 
-# VF2 specific sources
-K_SRC_VF2 := $(wildcard $K/*/vf2/*.c) $(wildcard $K/*/*/vf2/*.c)
-K_ASM_VF2 := $(wildcard $K/*/vf2/*.S) $(wildcard $K/*/*/vf2/*.S)
-
 # RISC-V specific objects
 OBJS_RV = \
   boot/rv/entry.o \
@@ -37,18 +33,6 @@ OBJS_LA = \
   $(K_ASM_COMMON:.S=-la.o) \
   $(K_SRC_LA:.c=-la.o) \
   $(K_ASM_LA:.S=-la.o)
-
-# VF2 specific objects (use init-rv as the first user program, same as qemu)
-OBJS_VF2 = \
-  boot/vf2/entry.o \
-  boot/vf2/main-vf2.o \
-  boot/rv/initcode.o \
-  $(K_SRC_COMMON:.c=-vf2.o) \
-  $(K_ASM_COMMON:.S=-vf2.o) \
-  $(K_SRC_RV:.c=-vf2.o) \
-  $(K_ASM_RV:.S=-vf2.o) \
-  $(K_SRC_VF2:.c=-vf2.o) \
-  $(K_ASM_VF2:.S=-vf2.o)
 
 # RISC-V specific objects for sh variant
 OBJS_RV_SH = \
@@ -114,16 +98,9 @@ CFLAGS_LA = $(CFLAGS_COMMON)
 CFLAGS_LA += -D LOONGARCH
 CFLAGS_LA += -Wno-unused-function
 
-# VF2 specific CFLAGS
-CFLAGS_VF2 = $(CFLAGS_COMMON)
-CFLAGS_VF2 += -mcmodel=medany -mno-relax
-CFLAGS_VF2 += -D VF2 -D RISCV
-CFLAGS_VF2 += -I./kernel/include
-
 # Add stack protector flags if available
 CFLAGS_RV += $(shell $(CC_RV) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
 CFLAGS_LA += $(shell $(CC_LA) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
-CFLAGS_VF2 += $(shell $(CC_RV) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
 
 # Disable PIE when possible (for Ubuntu 16.10 toolchain)
 ifneq ($(shell $(CC_RV) -dumpspecs 2>/dev/null | grep -e '[^f]no-pie'),)
@@ -140,26 +117,10 @@ ifneq ($(shell $(CC_LA) -dumpspecs 2>/dev/null | grep -e '[^f]nopie'),)
 CFLAGS_LA += -fno-pie -nopie
 endif
 
-ifneq ($(shell $(CC_RV) -dumpspecs 2>/dev/null | grep -e '[^f]no-pie'),)
-CFLAGS_VF2 += -fno-pie -no-pie
-endif
-ifneq ($(shell $(CC_RV) -dumpspecs 2>/dev/null | grep -e '[^f]nopie'),)
-CFLAGS_VF2 += -fno-pie -nopie
-endif
-
 # Additional flags for toolchains
 CFLAGS_RV += -static -nostartfiles -fno-pic
 CFLAGS_LA += -static -nostartfiles -fno-pic
 CFLAGS_LA += -Wno-shift-overflow
-
-CFLAGS_VF2 += -static -nostartfiles -fno-pic
-
-# 2K1000 specific CFLAGS
-CFLAGS_LA2K1000 = $(CFLAGS_COMMON)
-CFLAGS_LA2K1000 += -D LOONGARCH -D LA2K1000
-CFLAGS_LA2K1000 += -static -nostartfiles -fno-pic -G 0
-CFLAGS_LA2K1000 += -Wno-shift-overflow
-CFLAGS_LA2K1000 += -I./include -I./include/fs/ext4 -I./include/board
 LDFLAGS = -z max-page-size=4096
 LDFLAGS_RV = $(LDFLAGS) -static -nostdlib
 LDFLAGS_LA = $(LDFLAGS) -static -nostdlib
@@ -193,43 +154,6 @@ kernel-la-sh: $U/initcode-la-sh $(OBJS_LA_SH) $K/la/kernel.ld
 	$(LD_LA) $(LDFLAGS_LA) -T $K/la/kernel.ld -o kernel-la-sh $(OBJS_LA_SH) 
 	$(OBJDUMP_LA) -S kernel-la-sh > kernel-la-sh.asm
 	$(OBJDUMP_LA) -t kernel-la-sh | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > kernel-la-sh.sym
-
-# === VF2 构建目标 ===
-
-# VF2 main target - builds everything needed for VF2
-vf2: kernel-vf2
-	@echo "=== VF2 build complete ==="
-	@echo "Ready for VF2 deployment!"
-
-# 2K1000 main target - builds everything needed for 2K1000
-2k1000: kernel-la2k1000
-	@echo "=== 2K1000 build complete ==="
-	@echo "Ready for 2K1000 deployment!"
-
-
-
-# VF2 ramdisk binary generation (depends on user programs)
-ramdisk.img: $(UPROGS_RV) tools/create_ramdisk.sh
-	@echo "=== Creating RAMDisk for VF2 ==="
-	@$(MAKE) $(UPROGS_RV)
-	@./tools/create_ramdisk.sh riscv-vf2
-
-# VF2 kernel with ramdisk (binary embedded); ensure init-rv is built
-kernel-vf2: $U/initcode-rv $(OBJS_VF2) $K/vf2/kernel.ld ramdisk.img
-	@echo "=== Building VF2 kernel ==="
-	# Convert raw image to object with symbols; put section into .rodata.ramdisk and page align
-	$(OBJCOPY_RV) -I binary -O elf64-littleriscv -B riscv \
-	  --rename-section .data=.ramdisk,alloc,load,readonly,data,contents \
-	  --set-section-alignment .ramdisk=4096 \
-	  ramdisk.img ramdisk.o
-	$(LD_RV) -r -o ramdisk-embed.o ramdisk.o
-	$(LD_RV) $(LDFLAGS_RV) -T $K/vf2/kernel.ld -o kernel-vf2 $(OBJS_VF2) ramdisk-embed.o
-	$(OBJDUMP_RV) -S kernel-vf2 > kernel-vf2.asm
-	$(OBJDUMP_RV) -t kernel-vf2 | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > kernel-vf2.sym
-	$(OBJCOPY_RV) -O binary kernel-vf2 kernel-vf2.bin
-	@echo "=== VF2 kernel build completed ==="
-	@echo "Kernel binary: kernel-vf2.bin"
-	@ls -lh kernel-vf2.bin
 
 # RISC-V initcode build
 $U/initcode-rv: $U/initcode.S $U/init-rv.c $(ULIB_C_SOURCES) $(ULIB_S_SOURCES_RV)
@@ -509,108 +433,23 @@ boot/rv/initcode-sh.o: boot/rv/initcode-sh.S $U/initcode-rv-sh
 boot/la/initcode-sh.o: boot/la/initcode-sh.S $U/initcode-la-sh
 	$(CC_LA) $(CFLAGS_LA) -c -o $@ $<
 
-# === VF2 编译规则 ===
-
-# VF2 object file compilation rules
-%-vf2.o: %.c
-	$(CC_RV) $(CFLAGS_VF2) -c -o $@ $<
-
-%-vf2.o: %.S
-	$(CC_RV) $(CFLAGS_VF2) -c -o $@ $<
-
-boot/vf2/entry.o: boot/vf2/entry.S
-	$(CC_RV) $(CFLAGS_VF2) -c -o $@ $<
-
-boot/vf2/main-vf2.o: boot/vf2/main.c
-	$(CC_RV) $(CFLAGS_VF2) -c -o $@ $<
-
-# Remove old dependency on ramdisk header; binary embedding is used instead
-
-kernel/fs/ramdisk-vf2.o: kernel/fs/ramdisk.c
-	$(CC_RV) $(CFLAGS_VF2) -c -o $@ $<
-
-# 2K1000 object file compilation rules
-%-la2k1000.o: %.c
-	$(CC_LA) $(CFLAGS_LA2K1000) -c -o $@ $<
-%-la2k1000.o: %.S
-	$(CC_LA) $(CFLAGS_LA2K1000) -c -o $@ $<
-
-# Also support suffix "-2k1000.o" for explicitly named objects
-%-2k1000.o: %.c
-	$(CC_LA) $(CFLAGS_LA2K1000) -c -o $@ $<
-%-2k1000.o: %.S
-	$(CC_LA) $(CFLAGS_LA2K1000) -c -o $@ $<
-
-boot/2k1000/entry.o: boot/2k1000/entry.S
-	$(CC_LA) $(CFLAGS_LA2K1000) -c -o $@ $<
-
-boot/2k1000/main-2k1000.o: boot/2k1000/main-2k1000.c
-	$(CC_LA) $(CFLAGS_LA2K1000) -c -o $@ $<
-
-boot/2k1000/early_uart.o: boot/2k1000/early_uart.c
-	$(CC_LA) $(CFLAGS_LA2K1000) -c -o $@ $<
-
-kernel/fs/ramdisk-2k1000.o: kernel/fs/ramdisk.c
-	$(CC_LA) $(CFLAGS_LA2K1000) -c -o $@ $<
-
-# Ensure iointc-2k1000.o uses LA2K1000 flags
-kernel/trap/la/iointc-2k1000.o: kernel/trap/la/iointc-2k1000.c
-	$(CC_LA) $(CFLAGS_LA2K1000) -c -o $@ $<
-
 all: kernel-rv kernel-la
-
-# 2K1000 ramdisk binary generation (depends on user programs)
-ramdisk-2k1000.img: $(UPROGS_LA) tools/create_ramdisk.sh
-	@echo "=== Creating RAMDisk for 2K1000 ==="
-	@$(MAKE) $(UPROGS_LA)
-	@./tools/create_ramdisk.sh loongarch-2k1000
-	@cp -f ramdisk.img $@
-
-# 2K1000 specific objects
-OBJS_LA2K1000 = \
-  boot/2k1000/entry.o \
-  boot/2k1000/early_uart.o \
-  boot/2k1000/main-2k1000.o \
-  boot/la/initcode.o \
-  $(K_SRC_COMMON:.c=-la2k1000.o) \
-  $(K_ASM_COMMON:.S=-la2k1000.o) \
-  $(K_SRC_LA:.c=-la2k1000.o) \
-  $(K_ASM_LA:.S=-la2k1000.o)
-
-# 2K1000 kernel with ramdisk (binary embedded)
-kernel-la2k1000: $U/initcode-la $(OBJS_LA2K1000) $K/2k1000/kernel.ld ramdisk-2k1000.img
-	@echo "=== Building 2K1000 kernel ==="
-	$(OBJCOPY_LA) -I binary -O elf64-loongarch -B loongarch \
-	  --rename-section .data=.ramdisk,alloc,load,readonly,data,contents \
-	  --set-section-alignment .ramdisk=4096 \
-	  ramdisk.img ramdisk-2k1000.o
-	$(LD_LA) -r -o ramdisk-embed-2k1000.o ramdisk-2k1000.o
-	$(LD_LA) $(LDFLAGS_LA) -T $K/2k1000/kernel.ld -o kernel-la2k1000 $(OBJS_LA2K1000) ramdisk-embed-2k1000.o
-	$(OBJDUMP_LA) -S kernel-la2k1000 > kernel-la2k1000.asm
-	$(OBJDUMP_LA) -t kernel-la2k1000 | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > kernel-la2k1000.sym
-	$(OBJCOPY_LA) -O binary kernel-la2k1000 kernel-la2k1000.bin
-	@echo "=== 2K1000 kernel build completed ==="
-	@echo "Kernel binary: kernel-la2k1000.bin"
-	@ls -lh kernel-la2k1000.bin
 
 clean: 
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
 	*/*.o */*/*.o */*/*/*.o */*.d */*/*.d */*/*/*.d */*.asm */*.sym \
-	*/*-rv.o */*-la.o */*-vf2.o */*-la2k1000.o */*-2k1000.o */*/*-rv.o */*/*-la.o */*/*-vf2.o */*/*-la2k1000.o \
-	*/*/*/*-rv.o */*/*/*-la.o */*/*/*-vf2.o */*/*/*-la2k1000.o \
+	*/*-rv.o */*-la.o */*/*-rv.o */*/*-la.o \
+	*/*/*/*-rv.o */*/*/*-la.o \
 	$U/initcode-rv $U/initcode-la $U/initcode-rv.out $U/initcode-la.out \
 	$U/initcode-rv-sh $U/initcode-la-sh $U/initcode-rv-sh.out $U/initcode-la-sh.out \
-	 kernel-rv kernel-la kernel-vf2 kernel-la2k1000 \
-	kernel-rv.asm kernel-la.asm kernel-vf2.asm kernel-la2k1000.asm \
-	kernel-rv.sym kernel-la.sym kernel-vf2.sym kernel-la2k1000.sym \
+	 kernel-rv kernel-la \
+	kernel-rv.asm kernel-la.asm \
+	kernel-rv.sym kernel-la.sym \
 	kernel-rv-sh kernel-la-sh kernel-rv-sh.asm kernel-la-sh.asm \
 	kernel-rv-sh.sym kernel-la-sh.sym \
-	 kernel-vf2.bin kernel-la2k1000.bin \
 	 fs.img mkfs/mkfs .gdbinit \
         $U/usys-rv.S $U/usys-la.S \
 	 include/ramdisk_img.h \
-	 ramdisk.img ramdisk.o ramdisk-embed.o \
-	 ramdisk-2k1000.img ramdisk-2k1000.o ramdisk-embed-2k1000.o \
 	 sdcard-*.img \
 	$(UPROGS_RV) $(UPROGS_LA)
 
@@ -707,4 +546,4 @@ test-la: clean-test kernel-la sdcard-la.img
 		-v /home/zhangshuoyu/oscomp-testdata:/mnt/cghook/ \
 		zhouzhouyi/os-contest:20260510 python3 /cg/kernel.zip
 
-.PHONY: all qemu qemu-la qemu-gdb qemu-gdb-la clean tags qemu-sh qemu-la-sh vf2 clean-test test test-la
+.PHONY: all qemu qemu-la qemu-gdb qemu-gdb-la clean tags qemu-sh qemu-la-sh clean-test test test-la

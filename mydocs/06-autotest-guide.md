@@ -212,6 +212,24 @@ sudo docker run --rm \
   -v /home/chaos/autotest-for-oskernel:/cg \
   -v /home/chaos/oscomp-testdata:/mnt/cghook/ \
   zhouzhouyi/os-contest:20260510 python3 /cg/kernel.zip
+
+cd 
+
+docker run --rm \
+  -v /home/zhangshuoyu/OSuperBeauty:/coursegrader/submit \
+  -v /home/zhangshuoyu/oscomp-testdata:/coursegrader/testdata \
+  -v /home/zhangshuoyu/autotest-for-oskernel:/cg \
+  -v /home/zhangshuoyu/oscomp-testdata:/mnt/cghook/ \
+  zhouzhouyi/os-contest:20260510 python3 /cg/kernel.zip
+
+cd 
+
+docker run --rm \
+  -v /home/angel/OSuperBeauty:/coursegrader/submit \
+  -v /home/angel/oscomp-testdata:/coursegrader/testdata \
+  -v /home/angel/autotest-for-oskernel:/cg \
+  -v /home/angel/oscomp-testdata:/mnt/cghook/ \
+  zhouzhouyi/os-contest:20260510 python3 /cg/kernel.zip
 ```
 
 ### 5.2 每一个 `-v` 参数的含义

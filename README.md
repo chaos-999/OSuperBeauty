@@ -1,58 +1,12 @@
-# SpringOS
+# OSuperBeauty
 
-队伍名称：静春山
-学校名称：中山大学
-队伍成员：陈思谋
-指导教师：陈鹏飞
+队伍名称：超级美少女队
+学校名称：中国人民解放军国防科大学
+队伍成员：陈浩男 张朔瑜 张佳安琪
+指导教师：文艳军
 
-SpringOS是基于xv6-riscv的操作系统，支持RISC-V架构，LoongArch架构，可以在VisionFive2及龙芯2K1000LA开发板上运行。
+yet still not Ready to write
 
-当前为主分支，是决赛截止时提交的内容
-
-## 项目特性
-
-- **RISC-V架构**: 支持RISC-V 64位多处理器
-- **LoongArch架构**: 支持LoongArch 64位多处理器
-- **现代文件系统**: 集成EXT4文件系统支持
-- **VFS架构**: 实现虚拟文件系统抽象层
-- **信号系统**: 完整signal实现
-- **Futex**: Futex实现
-- **系统调用**: 完整的Linux兼容系统调用接口
-- **网络模块**: TCP发送和接收函数，DNS解析功能，http服务端实现
-- **VisionFive2**: 支持VisionFive2上板运行
-- **2K1000星云板**: 支持2K1000星云板上板运行
-
-## 项目分支
-- main ： 项目主分支，包含qemu和VisionFive2及2K1000星云板上板
-- net  ： 网络分支，包含网络模块实现
-- on-site : 现场赛分支
-
-## 构建和运行
-
-```bash
-make clean         # 清理构建文件
-make all           # 构建内核
-make qemu          # 在QEMU中运行RISCV系统
-make qemu-la       # 在QEMU中运行LoongArch系统
-make vf2           # 构建VisionFive2内核
-make 2k1000        # 构建2k1000星云板内核
-make qemu-sh       # 在QEMU中运行RISCV-shell系统
-make qemu-la-sh    # 在QEMU中运行LoongArch-shell系统
-make qemu-gdb      # 进行gdb调试
-```
-
-## 项目文档
-
-技术文档位于 `/doc` 目录：
-- [决赛文档](final-doc.pdf) - 决赛演示幻灯片
-- [决赛幻灯片](final-ppt.pdf) - 决赛演示幻灯片
-- [决赛演示视频](https://pan.baidu.com/s/1l6nM_kRB-vhkD5LBCnZK-g?pwd=e32s) - 决赛成果演示视频
----------------------------------------------------------------------------------------------------------------------------------------------------
-- [阶段性成果幻灯片](stage.pptx) - 阶段性成果演示幻灯片
-- [阶段性成果演示视频](https://pan.baidu.com/s/1g1h6aDVpZo7643xDxY-PFg?pwd=dsmx) - 阶段性成果演示视频
----------------------------------------------------------------------------------------------------------------------------------------------------
-- [初赛幻灯片](pre.pptx) - 初赛演示幻灯片
-- [初赛演示视频](https://pan.baidu.com/s/1MuKaoRHOWxm33fQTyf67zQ?pwd=cc78) - 初赛演示视频
 
 ## 参考项目
 
