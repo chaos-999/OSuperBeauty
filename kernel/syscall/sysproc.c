@@ -759,7 +759,7 @@ uint64 sys_gettid(void) { return myproc()->pid; }
 
 uint64 sys_sendfile(void) {
     int out_fd, in_fd, count, offset;
-    uint64 poff;
+    uint64 poff;//offset
     struct file *out_f, *in_f;
 
     if (argfd(0, &out_fd, &out_f) < 0 || argfd(1, &in_fd, &in_f) < 0) {
@@ -767,6 +767,9 @@ uint64 sys_sendfile(void) {
     }
     argaddr(2, &poff);
     argint(3, &count);
+
+    // busybox cat passes 16MB count — cap to one page to prevent huge kmalloc
+    count = MIN(count, PGSIZE);
 
     void *buf = kmalloc(count);
 
@@ -837,6 +840,8 @@ static inline int ppoll_check(struct proc *p, struct file *f, short events) {
             case FD_PIPE: {
                 struct pipe *pi = f->f_pipe;
                 acquire(&pi->lock);
+                printf("PPOLL-PIPE: nread=%d nwrite=%d readopen=%d writeopen=%d\n",
+                       pi->nread, pi->nwrite, pi->readopen, pi->writeopen);
                 if (pi->nread != pi->nwrite || !pi->writeopen) revents |= POLLIN;
                 release(&pi->lock);
                 break;
@@ -917,8 +922,9 @@ uint64 sys_ppoll(void) {
     uint64 timeout_ticks = ppoll_calc(p, timeout_addr);
     int ready_count = 0;
 
-    // Kernel-integrated polling loop
-    for (int attempt = 0; attempt < 100 && ready_count == 0; attempt++) {
+    // Polling loop — yield CPU to let other processes (e.g. cat in a pipe)
+    // make progress, then re-check on next schedule
+    for (int attempt = 0; attempt < 1000 && ready_count == 0; attempt++) {
         for (nfds_t i = 0; i < nfds; i++) {
             struct pollfd *pfd = &fds[i];
             pfd->revents = 0;
@@ -929,9 +935,15 @@ uint64 sys_ppoll(void) {
                 continue;
             }
 
+            printf("PPOLL-CHK: pid=%d fd=%d type=%d events=%d\n",
+                   p->pid, pfd->fd,
+                   p->ofile[pfd->fd] ? p->ofile[pfd->fd]->f_type : -1,
+                   pfd->events);
             pfd->revents = ppoll_check(p, p->ofile[pfd->fd], pfd->events);
             if (pfd->revents) ready_count++;
         }
+
+        printf("PPOLL: pid=%d attempt=%d ready=%d\n", p->pid, attempt, ready_count);
 
         if (ready_count > 0) break;
         if (timeout_ticks > 0 && ticks >= timeout_ticks) break;
@@ -940,10 +952,9 @@ uint64 sys_ppoll(void) {
             return -1;
         }
 
-        // Kernel-level sleep coordination
-        acquire(&tickslock);
-        sleep(&ticks, &tickslock);
-        release(&tickslock);
+        // Yield CPU so pipe-writer processes (cat side of pipeline)
+        // can run and fill the pipe before we re-check
+        yield();
     }
 
     int result = (copyout(p->pagetable, fds_addr, (char *)fds, fds_size) < 0) ? -1 : ready_count;
@@ -1624,6 +1635,11 @@ uint64 sys_futex(void) {
         default:
             return -1;  // ENOSYS equivalent
     }
+}
+
+uint64 sys_getpgid(void) {
+    struct proc * p = myproc();
+    return p->pid;
 }
 
 #define COPY_SIZE 4096

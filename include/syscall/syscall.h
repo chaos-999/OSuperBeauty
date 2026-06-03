@@ -91,6 +91,8 @@
 #define SYS_sysinfo 179
 #define SYS_clock_nanosleep 115
 
+#define SYS_getpgid 155
+
 #define SYS_copy_file_range 285
 #define SYS_ftruncate 46
 

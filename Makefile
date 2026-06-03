@@ -450,7 +450,6 @@ clean:
 	 fs.img mkfs/mkfs .gdbinit \
         $U/usys-rv.S $U/usys-la.S \
 	 include/ramdisk_img.h \
-	 sdcard-*.img \
 	$(UPROGS_RV) $(UPROGS_LA)
 
 # try to generate a unique GDB port

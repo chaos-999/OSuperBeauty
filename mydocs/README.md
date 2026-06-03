@@ -15,3 +15,5 @@
 | `09-competition-strategy.md` | 🏆 初赛晋级形势分析：237 队分层画像、分数线估算、最优攻略路线（P0-P4）、时间线建议 | 2026-06-01 18:59 |
 | `10-docker-test-flow.md` | 🔁 Docker 测评工作流优化：gzip 残留报错根因、Makefile 一键测评目标、目录权限只读设置 | 2026-06-02 15:18 |
 | `11-prelim-code-slim.md` | ✂️ 初赛代码瘦身：QEMU vs 板子文件全量分类、可安全删除清单、Makefile 清理建议、保守/激进两套方案 | 2026-06-02 20:50 |
+| `12-makefile-qemu-busybox.md` | 📖 Makefile + QEMU 入门教程 + busybox 调试实录：逐行讲 Makefile、逐参数讲 QEMU、记录 busybox 死循环的发现过程和解决方案 | 2026-06-02 22:21 |
+| `13-busybox-pipe-sendfile-debug.md` | 🔍 Busybox 管道静默失败调试：syscall 日志插桩方法、从日志定位 cat 用 sendfile(71) 而非 write(64) 的完整过程、sendfile 修复方向 | 2026-06-03 14:25 |

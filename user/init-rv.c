@@ -136,71 +136,71 @@ void test_pre() {
 
     int basic_testcases = 32;
 
-    printf("before chdir basic-glibc\n");
-    chdir(basic_path_glibc);
-    printf("after chdir basic-glibc\n");
-    printf("#### OS COMP TEST GROUP START basic-glibc ####\n");
-    for (int i = 0; i < basic_testcases; i++) {
-        pid = fork();
-        if (pid < 0) {
-            printf("init: fork failed\n");
-            exit(1);
-        }
-        if (pid == 0) {
-            exec(basic_name[i], argv2);
-            exit(1);
-        }
-        wait(0);
-    }
-    printf("#### OS COMP TEST GROUP END basic-glibc ####\n");
+    // printf("before chdir basic-glibc\n");
+    // chdir(basic_path_glibc);
+    // printf("after chdir basic-glibc\n");
+    // printf("#### OS COMP TEST GROUP START basic-glibc ####\n");
+    // for (int i = 0; i < basic_testcases; i++) {
+    //     pid = fork();
+    //     if (pid < 0) {
+    //         printf("init: fork failed\n");
+    //         exit(1);
+    //     }
+    //     if (pid == 0) {
+    //         exec(basic_name[i], argv2);
+    //         exit(1);
+    //     }
+    //     wait(0);
+    // }
+    // printf("#### OS COMP TEST GROUP END basic-glibc ####\n");
 
-    chdir(basic_path_musl);
-    printf("#### OS COMP TEST GROUP START basic-musl ####\n");
-    for (int i = 0; i < basic_testcases; i++) {
-        pid = fork();
-        if (pid < 0) {
-            printf("init: fork failed\n");
-            exit(1);
-        }
-        if (pid == 0) {
-            exec(basic_name[i], argv2);
-            exit(1);
-        }
-        wait(0);
-    }
-    printf("#### OS COMP TEST GROUP END basic-musl ####\n");
+    // chdir(basic_path_musl);
+    // printf("#### OS COMP TEST GROUP START basic-musl ####\n");
+    // for (int i = 0; i < basic_testcases; i++) {
+    //     pid = fork();
+    //     if (pid < 0) {
+    //         printf("init: fork failed\n");
+    //         exit(1);
+    //     }
+    //     if (pid == 0) {
+    //         exec(basic_name[i], argv2);
+    //         exit(1);
+    //     }
+    //     wait(0);
+    // }
+    // printf("#### OS COMP TEST GROUP END basic-musl ####\n");
 
     // 实际应该使用的正确busybox测试命令，但是目前存在内存问题
 
-    // printf("before chdir busybox\n");
-    // chdir(bb_path_musl);  // 切换到glibc测试
-    // printf("after chdir busybox\n");
-    // pid = fork();
-    // if (pid < 0) {
-    //   printf("init: fork failed\n");
-    //   exit(1);
-    // }
-    // if(pid == 0) {
-    //     execve("busybox", bb_testcode, NULL);
-    //     printf("init: exec busybox_testcode failed\n");
-    //     exit(1);
-    // }
-    // wait(0);
+    printf("before chdir busybox\n");
+    chdir(bb_path_musl);  // 切换到musl测试
+    printf("after chdir busybox\n");
+    pid = fork();
+    if (pid < 0) {
+      printf("init: fork failed\n");
+      exit(1);
+    }
+    if(pid == 0) {
+        execve("busybox", bb_testcode, NULL);
+        printf("init: exec busybox_testcode failed\n");
+        exit(1);
+    }
+    wait(0);
 
-    // printf("before chdir busybox\n");
-    // chdir(bb_path_glibc);  // 切换到glibc测试
-    // printf("after chdir busybox\n");
-    // pid = fork();
-    // if (pid < 0) {
-    //   printf("init: fork failed\n");
-    //   exit(1);
-    // }
-    // if(pid == 0) {
-    //     execve("busybox", bb_testcode, NULL);
-    //     printf("init: exec busybox_testcode failed\n");
-    //     exit(1);
-    // }
-    // wait(0);
+    printf("before chdir busybox\n");
+    chdir(bb_path_glibc);  // 切换到glibc测试
+    printf("after chdir busybox\n");
+    pid = fork();
+    if (pid < 0) {
+      printf("init: fork failed\n");
+      exit(1);
+    }
+    if(pid == 0) {
+        execve("busybox", bb_testcode, NULL);
+        printf("init: exec busybox_testcode failed\n");
+        exit(1);
+    }
+    wait(0);
 
     return;
 }
@@ -444,6 +444,16 @@ int main() {
 
     // --- ★ basic 测试：直接 fork+exec 测试二进制（含完整评测标记格式）---
     // 无需 busybox，不依赖 basic_testcode.sh 脚本
+    // 在 test_pre() 之前插入，试一下 busybox 到底什么反应
+    chdir("/glibc/");
+    int pid = fork();
+    if (pid == 0) {
+        char *argv[] = {"busybox", "cat", "busybox_cmd.txt", 0};
+        execve("busybox", argv, NULL);
+        printf("execve busybox cat FAILED\n");
+        exit(1);
+    }
+    wait(0);
     test_pre();
 
     // --- ★ 自动扫描并执行测试脚本（需要 busybox sh applet，当前未完善）---

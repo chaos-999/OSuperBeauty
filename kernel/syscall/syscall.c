@@ -151,6 +151,7 @@ extern uint64 sys_madvise(void);
 extern uint64 sys_mremap(void);
 extern uint64 sys_mprotect(void);
 extern uint64 sys_futex(void);
+extern uint64 sys_getpgid(void);
 extern uint64 sys_copy_file_range(void);
 extern uint64 sys_ftruncate(void);
 extern uint64 sys_splice(void);
@@ -244,6 +245,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_madvise] sys_madvise,
     [SYS_renameat2] sys_renameat2,
     [SYS_futex] sys_futex,
+    [SYS_getpgid] sys_getpgid,
     [SYS_copy_file_range] sys_copy_file_range,
     [SYS_ftruncate] sys_ftruncate,
     [SYS_splice] sys_splice,

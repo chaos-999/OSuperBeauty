@@ -93,6 +93,8 @@ int piperead(struct pipe *pi, uint64 addr, int n) {
     char ch;
 
     acquire(&pi->lock);
+    printf("PIPE-READ: pid=%d name=%s n=%d nread=%d nwrite=%d writeopen=%d\n",
+           pr->pid, pr->name, n, pi->nread, pi->nwrite, pi->writeopen);
     while (pi->nread == pi->nwrite && pi->writeopen) {
         if (killed(pr)) {
             release(&pi->lock);
@@ -138,6 +140,8 @@ int pipewrite_kernel(struct pipe *pi, uint64 addr, int n) {
 
     // Wake up any waiting readers
     wakeup(&pi->nread);
+    printf("PIPE-WRITE: pid=%d name=%s n=%d total=%d\n",
+           current_proc->pid, current_proc->name, n, bytes_written);
     release(&pi->lock);
 
     return bytes_written;
