@@ -840,8 +840,6 @@ static inline int ppoll_check(struct proc *p, struct file *f, short events) {
             case FD_PIPE: {
                 struct pipe *pi = f->f_pipe;
                 acquire(&pi->lock);
-                printf("PPOLL-PIPE: nread=%d nwrite=%d readopen=%d writeopen=%d\n",
-                       pi->nread, pi->nwrite, pi->readopen, pi->writeopen);
                 if (pi->nread != pi->nwrite || !pi->writeopen) revents |= POLLIN;
                 release(&pi->lock);
                 break;
@@ -922,9 +920,11 @@ uint64 sys_ppoll(void) {
     uint64 timeout_ticks = ppoll_calc(p, timeout_addr);
     int ready_count = 0;
 
-    // Polling loop — yield CPU to let other processes (e.g. cat in a pipe)
-    // make progress, then re-check on next schedule
-    for (int attempt = 0; attempt < 1000 && ready_count == 0; attempt++) {
+    // Poll loop: sleep on pipe channels so writers can wake us directly.
+    // For non-pipe fds or if no pipe fds, fall back to short yield loops.
+    for (int attempt = 0; attempt < 2000 && ready_count == 0; attempt++) {
+        struct pipe *sleep_pipe = 0;
+
         for (nfds_t i = 0; i < nfds; i++) {
             struct pollfd *pfd = &fds[i];
             pfd->revents = 0;
@@ -935,26 +935,32 @@ uint64 sys_ppoll(void) {
                 continue;
             }
 
-            printf("PPOLL-CHK: pid=%d fd=%d type=%d events=%d\n",
-                   p->pid, pfd->fd,
-                   p->ofile[pfd->fd] ? p->ofile[pfd->fd]->f_type : -1,
-                   pfd->events);
-            pfd->revents = ppoll_check(p, p->ofile[pfd->fd], pfd->events);
+            struct file *ff = p->ofile[pfd->fd];
+            pfd->revents = ppoll_check(p, ff, pfd->events);
             if (pfd->revents) ready_count++;
+            // remember first pipe for sleep channel
+            if (!sleep_pipe && ff->f_type == FD_PIPE)
+                sleep_pipe = ff->f_pipe;
         }
-
-        printf("PPOLL: pid=%d attempt=%d ready=%d\n", p->pid, attempt, ready_count);
 
         if (ready_count > 0) break;
         if (timeout_ticks > 0 && ticks >= timeout_ticks) break;
-        if (killed(p)) {
-            kfree(fds);
-            return -1;
-        }
+        if (killed(p)) { kfree(fds); return -1; }
 
-        // Yield CPU so pipe-writer processes (cat side of pipeline)
-        // can run and fill the pipe before we re-check
-        yield();
+        // Sleep on the pipe's &pi->nread channel — matches wakeup in
+        // pipewrite_kernel and pipeclose, so no timing race with writer.
+        if (sleep_pipe) {
+            acquire(&sleep_pipe->lock);
+            if (sleep_pipe->nread != sleep_pipe->nwrite || !sleep_pipe->writeopen) {
+                release(&sleep_pipe->lock);
+                continue;
+            }
+            // sleep releases lock, re-acquires on wake
+            sleep(&sleep_pipe->nread, &sleep_pipe->lock);
+            release(&sleep_pipe->lock);
+        } else {
+            yield();
+        }
     }
 
     int result = (copyout(p->pagetable, fds_addr, (char *)fds, fds_size) < 0) ? -1 : ready_count;

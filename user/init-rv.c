@@ -445,15 +445,15 @@ int main() {
     // --- ★ basic 测试：直接 fork+exec 测试二进制（含完整评测标记格式）---
     // 无需 busybox，不依赖 basic_testcode.sh 脚本
     // 在 test_pre() 之前插入，试一下 busybox 到底什么反应
-    chdir("/glibc/");
-    int pid = fork();
-    if (pid == 0) {
-        char *argv[] = {"busybox", "cat", "busybox_cmd.txt", 0};
-        execve("busybox", argv, NULL);
-        printf("execve busybox cat FAILED\n");
-        exit(1);
-    }
-    wait(0);
+    // chdir("/glibc/");
+    // int pid = fork();
+    // if (pid == 0) {
+    //     char *argv[] = {"busybox", "cat", "busybox_cmd.txt", 0};
+    //     execve("busybox", argv, NULL);
+    //     printf("execve busybox cat FAILED\n");
+    //     exit(1);
+    // }
+    // wait(0);
     test_pre();
 
     // --- ★ 自动扫描并执行测试脚本（需要 busybox sh applet，当前未完善）---
