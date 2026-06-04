@@ -18,3 +18,4 @@
 | `12-makefile-qemu-busybox.md` | 📖 Makefile + QEMU 入门教程 + busybox 调试实录：逐行讲 Makefile、逐参数讲 QEMU、记录 busybox 死循环的发现过程和解决方案 | 2026-06-02 22:21 |
 | `13-busybox-pipe-sendfile-debug.md` | 🔍 Busybox 管道静默失败调试：syscall 日志插桩方法、从日志定位 cat 用 sendfile(71) 而非 write(64) 的完整过程、sendfile 修复方向 | 2026-06-03 14:25 |
 | `14-sendfile-ppoll-pipe-fix.md` | 🔧 sendfile + ppoll 修复实录：sendfile 16MB count cap、ppoll 睡 pipe 频道消除时序竞争、管道打通全流程 | 2026-06-03 15:57 |
+| `15-procfs-design.md` | 🗂️ procfs 虚拟文件系统实现方案：VFS 架构分析、逐步实现指南（7 阶段）、与 EXT4 隔离、支持 busybox ps | 2026-06-03 20:02 |

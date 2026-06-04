@@ -191,6 +191,8 @@ struct proc {
     struct file *ofile[NOFILE];   // Open files
     struct file_vnode cwd;        // Current directory
     char name[16];                // Process name (debugging)
+    char console_buf[256];        // Per-process console write buffer
+    int console_buf_pos;          // Position in console_buf
     struct vma vmas[NVMA];        // Virtual Memory Areas for mmap
     uint64 clear_child_tid;       // Clear child tid
     uint64 robust_list_head;      // Robust futex list head

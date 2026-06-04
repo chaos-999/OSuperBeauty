@@ -205,6 +205,9 @@ static void freeproc(struct proc *p) {
 
     sig_cleanup(p);
 
+    // flush any buffered console output (last line may not end with \n)
+    console_flush(p);
+
     if (p->pagetable) proc_freepagetable(p->pagetable, p->sz);
     p->pagetable = 0;
     p->sz = 0;

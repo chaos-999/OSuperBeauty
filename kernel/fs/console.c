@@ -33,6 +33,7 @@
 
 struct {
     struct spinlock lock;
+    struct spinlock write_lock;
 
     // input
 #define INPUT_BUF_SIZE 128
@@ -62,15 +63,44 @@ void consputc(int c) {
 
 //
 // user write()s to the console go here.
+// Buffered per-process: output is accumulated until \n or buffer full,
+// then flushed atomically to avoid interleaving under timer preemption.
 //
 int consolewrite(int user_src, uint64 src, int n) {
     int i;
+    struct proc *p = myproc();
+
     for (i = 0; i < n; i++) {
         char c;
         if (either_copyin(&c, user_src, src + i, 1) == -1) break;
-        PUTCHAR(c);
+
+        if (p->console_buf_pos < (int)sizeof(p->console_buf) - 1)
+            p->console_buf[p->console_buf_pos++] = c;
+
+        if (c == '\n' || p->console_buf_pos >= (int)sizeof(p->console_buf) - 1) {
+            acquire(&cons.write_lock);
+            for (int j = 0; j < p->console_buf_pos; j++)
+                PUTCHAR(p->console_buf[j]);
+            release(&cons.write_lock);
+            p->console_buf_pos = 0;
+        }
     }
     return i;
+}
+
+//
+// Flush any buffered console output for a process.
+// Called on process exit to avoid losing the last line
+// (which may not end with \n).
+//
+void console_flush(struct proc *p) {
+    if (p->console_buf_pos > 0) {
+        acquire(&cons.write_lock);
+        for (int j = 0; j < p->console_buf_pos; j++)
+            PUTCHAR(p->console_buf[j]);
+        release(&cons.write_lock);
+        p->console_buf_pos = 0;
+    }
 }
 
 //
@@ -177,6 +207,7 @@ void consoleintr(int c) {
 
 void consoleinit(void) {
     initlock(&cons.lock, "cons");
+    initlock(&cons.write_lock, "cons_write");
 
     uartinit();
 
