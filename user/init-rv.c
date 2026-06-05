@@ -172,35 +172,35 @@ void test_pre() {
 
     // 实际应该使用的正确busybox测试命令，但是目前存在内存问题
 
-    // printf("before chdir busybox\n");
-    // chdir(bb_path_musl);  // 切换到musl测试
-    // printf("after chdir busybox\n");
-    // pid = fork();
-    // if (pid < 0) {
-    //   printf("init: fork failed\n");
-    //   exit(1);
-    // }
-    // if(pid == 0) {
-    //     execve("busybox", bb_testcode, NULL);
-    //     printf("init: exec busybox_testcode failed\n");
-    //     exit(1);
-    // }
-    // wait(0);
+    printf("before chdir busybox\n");
+    chdir(bb_path_musl);  // 切换到musl测试
+    printf("after chdir busybox\n");
+    pid = fork();
+    if (pid < 0) {
+      printf("init: fork failed\n");
+      exit(1);
+    }
+    if(pid == 0) {
+        execve("busybox", bb_testcode, NULL);
+        printf("init: exec busybox_testcode failed\n");
+        exit(1);
+    }
+    wait(0);
 
-    // printf("before chdir busybox\n");
-    // chdir(bb_path_glibc);  // 切换到glibc测试
-    // printf("after chdir busybox\n");
-    // pid = fork();
-    // if (pid < 0) {
-    //   printf("init: fork failed\n");
-    //   exit(1);
-    // }
-    // if(pid == 0) {
-    //     execve("busybox", bb_testcode, NULL);
-    //     printf("init: exec busybox_testcode failed\n");
-    //     exit(1);
-    // }
-    // wait(0);
+    printf("before chdir busybox\n");
+    chdir(bb_path_glibc);  // 切换到glibc测试
+    printf("after chdir busybox\n");
+    pid = fork();
+    if (pid < 0) {
+      printf("init: fork failed\n");
+      exit(1);
+    }
+    if(pid == 0) {
+        execve("busybox", bb_testcode, NULL);
+        printf("init: exec busybox_testcode failed\n");
+        exit(1);
+    }
+    wait(0);
 
     return;
 }

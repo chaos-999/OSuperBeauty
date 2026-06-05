@@ -19,3 +19,5 @@
 | `13-busybox-pipe-sendfile-debug.md` | 🔍 Busybox 管道静默失败调试：syscall 日志插桩方法、从日志定位 cat 用 sendfile(71) 而非 write(64) 的完整过程、sendfile 修复方向 | 2026-06-03 14:25 |
 | `14-sendfile-ppoll-pipe-fix.md` | 🔧 sendfile + ppoll 修复实录：sendfile 16MB count cap、ppoll 睡 pipe 频道消除时序竞争、管道打通全流程 | 2026-06-03 15:57 |
 | `15-procfs-design.md` | 🗂️ procfs 虚拟文件系统实现方案：VFS 架构分析、逐步实现指南（7 阶段）、与 EXT4 隔离、支持 busybox ps | 2026-06-03 20:02 |
+| `16-console-output-race.md` | 🔍 控制台输出竞争完整诊断与修复：根因三层分析（consolewrite 无锁/timer 抢断/测试集 printf 分段 write）→ 方案评估 → 行缓冲实现 → 验证 | 2026-06-05 07:59 |
+| `17-buddy-panic-extent-double-free.md` | 💥 buddy_free panic 诊断与修复：ext4 extent tree split 失败 → error path 对 path 二次释放 → buddy 将 panic 降级为 warning | 2026-06-05 11:12 |

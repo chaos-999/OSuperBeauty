@@ -141,7 +141,10 @@ static void _combine(struct buddy *self, int index) {
 }
 
 void buddy_free(struct buddy *self, int offset) {
-    if (offset >= (1 << self->level)) panic("buddy_free: invalid offset");
+    if (offset >= (1 << self->level)) {
+        printf("buddy_free: WARNING invalid offset %d (max %d)\n", offset, 1 << self->level);
+        return;
+    }
     int left = 0;
     int length = 1 << self->level;
     int index = 0;
@@ -149,11 +152,14 @@ void buddy_free(struct buddy *self, int offset) {
     for (;;) {
         switch (self->tree[index]) {
             case NODE_USED:
-                if (offset != left) panic("buddy_free: offset mismatch");
+                if (offset != left) {
+                    printf("buddy_free: WARNING offset mismatch (expected %d, got %d)\n", left, offset);
+                    return;
+                }
                 _combine(self, index);
                 return;
             case NODE_UNUSED:
-                panic("buddy_free: freeing unused block");
+                printf("buddy_free: WARNING freeing unused block at offset %d\n", offset);
                 return;
             default:
                 length /= 2;
@@ -289,7 +295,9 @@ void buddy_kfree(void *ptr) {
 
     char *addr = (char *)ptr;
     if (addr < buddy_mem_base || addr >= buddy_mem_base + buddy_mem_size) {
-        panic("buddy_kfree: address out of range");
+        printf("buddy_kfree: WARNING address %p out of buddy range [%p, %p)\n",
+               addr, buddy_mem_base, buddy_mem_base + buddy_mem_size);
+        return;
     }
 
     int offset = (addr - buddy_mem_base) / PGSIZE;

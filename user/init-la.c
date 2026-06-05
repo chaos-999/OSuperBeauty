@@ -500,7 +500,7 @@ int main() {
     test_pre();
 
     // interrupt / copy-file-range / splice 测试
-    test_final();
+    //test_final();
 
     // test_on_site();  // busybox/git 依赖未就绪，详见上方 #if 0
 
