@@ -204,6 +204,9 @@ gzip -d sdcard-rv.img.gz
 ### 2.1 完整命令
 
 ```bash
+
+make kernel-la -j$(nproc)
+
 qemu-system-riscv64 \
   -machine virt \
   -kernel kernel-rv \

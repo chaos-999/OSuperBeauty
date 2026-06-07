@@ -8,6 +8,7 @@
 #include "lib/elf.h"
 #include "fs/vfs/inode.h"
 #include "fs/vfs/ops.h"
+#include "errno.h"
 
 int flags2perm(int flags) {
 #ifdef RISCV
@@ -38,7 +39,7 @@ static int loadseg(pde_t *, uint64, struct inode *, uint, uint);
 #ifdef RISCV
 int execve(char *path, char **argv, char **envp) {
     char *s, *last;
-    int i, off;
+    int i, off, ret = -1;
     uint64 envc, argc, sz = 0, sp, ustack[MAXARG], estack[MAXENV], stackbase;
     struct elfhdr elf;
     struct inode *ip;
@@ -52,7 +53,7 @@ int execve(char *path, char **argv, char **envp) {
 
     if ((ip = namei(path)) == 0) {
         // printf("VF2DBG: execve namei failed for %s\n", path);
-        return -1;
+        return -ENOENT;
     }
     ip->i_op->lock(ip);
 
@@ -71,6 +72,7 @@ int execve(char *path, char **argv, char **envp) {
 
     if (elf.magic != ELF_MAGIC) {
         // printf("VF2DBG: execve bad ELF magic for %s (magic=0x%x)\n", path, elf.magic);
+        ret = -ENOEXEC;  // let musl/glibc know it's a script, not an ELF
         goto bad;
     }
 
@@ -223,6 +225,7 @@ int execve(char *path, char **argv, char **envp) {
     p->sz = sz;                     // Process size only includes program segments, not stack
     p->trapframe->epc = elf.entry;  // initial program counter = main
     p->trapframe->sp = sp;          // initial stack pointer
+    safestrcpy(p->exec_path, path, MAXPATH);  // for /proc/self/exe
 
     release(&p->lock);
 
@@ -231,7 +234,7 @@ int execve(char *path, char **argv, char **envp) {
 
 bad:
     // printf("VF2DBG: execve failed for %s\n", path);
-    return -1;
+    return ret;
 }
 #endif
 

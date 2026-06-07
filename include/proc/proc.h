@@ -190,6 +190,7 @@ struct proc {
     struct context context;       // swtch() here to run process
     struct file *ofile[NOFILE];   // Open files
     struct file_vnode cwd;        // Current directory
+    char exec_path[MAXPATH];     // Executable path (for /proc/self/exe)
     char name[16];                // Process name (debugging)
     char console_buf[256];        // Per-process console write buffer
     int console_buf_pos;          // Position in console_buf

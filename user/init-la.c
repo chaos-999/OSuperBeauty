@@ -18,6 +18,8 @@ char bb_path_glibc[] = "/glibc/";
 char *bb_testcode[10] = {"busybox", "sh", "busybox_testcode.sh", NULL};
 char *interrupts_testcode[10] = {"busybox", "sh", "interrupts_testcode.sh", NULL};
 char *git_testcode[10] = {"busybox", "sh", "git_testcode.sh", NULL};
+char *lua_testcode[10] = {"busybox", "sh", "lua_testcode.sh", NULL};
+char *libctest_testcode[10] = {"busybox", "sh", "libc-test_testcode.sh", NULL};
 // char *busybox_echo_testcode[10] = {
 //     "busybox", "sh", "-c", "echo \"hello world\" > README.md", NULL
 //   };
@@ -158,6 +160,24 @@ void test_pre() {
 
     int basic_testcases = 32;
 
+    printf("before chdir basic-musl\n");
+    chdir(basic_path_musl);
+    printf("after chdir basic-musl\n");
+    printf("#### OS COMP TEST GROUP START basic-musl ####\n");
+    for (int i = 0; i < basic_testcases; i++) {
+        pid = fork();
+        if (pid < 0) {
+            printf("init: fork failed\n");
+            exit(1);
+        }
+        if (pid == 0) {
+            exec(basic_name[i], argv2);
+            exit(1);
+        }
+        wait(0);
+    }
+    printf("#### OS COMP TEST GROUP END basic-musl ####\n");
+
     printf("before chdir basic-glibc\n");
     chdir(basic_path_glibc);
     printf("after chdir basic-glibc\n");
@@ -176,21 +196,41 @@ void test_pre() {
     }
     printf("#### OS COMP TEST GROUP END basic-glibc ####\n");
 
-    chdir(basic_path_musl);
-    printf("#### OS COMP TEST GROUP START basic-musl ####\n");
-    for (int i = 0; i < basic_testcases; i++) {
-        pid = fork();
-        if (pid < 0) {
-            printf("init: fork failed\n");
-            exit(1);
-        }
-        if (pid == 0) {
-            exec(basic_name[i], argv2);
-            exit(1);
-        }
+    // --- lua test (glibc only; musl binary has pcalau12i bug) ---
+    printf("before chdir lua-glibc\n");
+    chdir(bb_path_glibc);
+    printf("after chdir lua-glibc\n");
+    printf("#### OS COMP TEST GROUP START lua-glibc ####\n");
+    pid = fork();
+    if (pid < 0) {
+        printf("init: fork failed\n");
+    } else if (pid == 0) {
+        execve("busybox", lua_testcode, NULL);
+        printf("init: exec lua_testcode failed\n");
+        exit(1);
+    } else {
         wait(0);
     }
-    printf("#### OS COMP TEST GROUP END basic-musl ####\n");
+    printf("#### OS COMP TEST GROUP END lua-glibc ####\n");
+
+    // --- libc-test (glibc only; musl binary has pcalau12i bug) ---
+    printf("before chdir libc-test-glibc\n");
+    chdir(bb_path_glibc);
+    printf("after chdir libc-test-glibc\n");
+    printf("#### OS COMP TEST GROUP START libc-test-glibc ####\n");
+    pid = fork();
+    if (pid < 0) {
+        printf("init: fork failed\n");
+    } else if (pid == 0) {
+        execve("busybox", libctest_testcode, NULL);
+        printf("init: exec libc-test_testcode failed\n");
+        exit(1);
+    } else {
+        wait(0);
+    }
+    printf("#### OS COMP TEST GROUP END libc-test-glibc ####\n");
+
+
 
     // 实际应该使用的正确busybox测试命令，但是目前存在内存问题
 

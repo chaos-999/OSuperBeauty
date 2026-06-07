@@ -146,6 +146,7 @@ found:
     p->egid = 0;
     p->sgid = 0;
     p->killed = 0;  // ensure known initial state
+    p->exec_path[0] = '\0';
     for (int i = 0; i < NOFILE; i++) {
         p->ofile[i] = 0;
     }
@@ -436,6 +437,7 @@ int fork(void) {
 
     np->cwd.fs = p->cwd.fs;
     strcpy(np->cwd.path, p->cwd.path);
+    strcpy(np->exec_path, p->exec_path);
 
     strcpy(np->name, p->name);
 
@@ -531,6 +533,7 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
     }
 
     strcpy(np->name, p->name);
+    strcpy(np->exec_path, p->exec_path);
 
     if (ptid != 0) {
         if (copyout(p->pagetable, (uint64)ptid, (char *)&np->pid, sizeof(np->pid)) < 0) {
