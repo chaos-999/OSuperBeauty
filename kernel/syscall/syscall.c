@@ -6,6 +6,7 @@
 #include "proc/proc.h"
 #include "syscall/syscall.h"
 #include "defs.h"
+#include "errno.h"
 
 // Fetch the uint64 at addr from the current process.
 int fetchaddr(uint64 addr, uint64 *ip) {
@@ -269,6 +270,6 @@ void syscall(void) {
         p->trapframe->a0 = ret;
     } else {
         printf("%d %s: unknown sys call %d\n", p->pid, p->name, num);
-        p->trapframe->a0 = -1;
+        p->trapframe->a0 = -ENOSYS;
     }
 }

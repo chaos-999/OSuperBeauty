@@ -19,6 +19,7 @@ void sig_init(struct proc *p) {
 
     memset(p->sig_handlers, 0, sizeof(struct sig_handlers));
     initlock(&p->sig_handlers->lock, "sighandlers");
+    p->sig_handlers->refcount = 1;  // 初始引用计数为 1
 
     // 初始化默认处理器
     for (int i = 1; i <= MAX_SIGNALS; i++) {
@@ -34,7 +35,12 @@ void sig_init(struct proc *p) {
 
 // 清理信号处理系统
 void sig_cleanup(struct proc *p) {
-    if (p->sig_handlers) {
+    acquire(&p->sig_handlers->lock);
+    p->sig_handlers->refcount--;
+    int refcount = p->sig_handlers->refcount;
+    release(&p->sig_handlers->lock);
+
+    if (refcount == 0) {
         kfree(p->sig_handlers);
         p->sig_handlers = 0;
     }

@@ -15,6 +15,7 @@
 #include "poll.h"
 #include "fs/vfs/ops.h"
 #include "futex.h"
+#include "errno.h"
 
 uint ticks0;
 
@@ -82,7 +83,7 @@ uint64 sys_sbrk(void) {
 
     argint(0, &n);
     addr = myproc()->sz;
-    if (growproc(n) < 0) return -1;
+    if (growproc(n) < 0) return -ENOMEM;
     return addr;
 }
 
@@ -98,7 +99,7 @@ uint64 sys_sleep(void) {
         if (myproc()->killed) {
             // printf("sys_sleep release the tickslock\n");
             release(&tickslock);
-            return -1;
+            return -EINTR;
         }
         sleep(&ticks, &tickslock);
     }
@@ -136,7 +137,7 @@ uint64 sys_gettimeofday(void) {
     argaddr(1, &tz_addr);
 
     if (tv_addr == 0) {
-        return -1;  // EFAULT - Invalid pointer
+        return -EFAULT;  // EFAULT - Invalid pointer
     }
 
     // 使用真实硬件时间源：
@@ -176,7 +177,7 @@ uint64 sys_gettimeofday(void) {
 
     // Copy the result to user space
     if (copyout(myproc()->pagetable, tv_addr, (char *)&tv, sizeof(tv)) < 0) {
-        return -1;  // EFAULT - Copy to user space failed
+        return -EFAULT;  // EFAULT - Copy to user space failed
     }
 
     // Handle timezone parameter (obsolete but still supported)
@@ -185,7 +186,7 @@ uint64 sys_gettimeofday(void) {
         tz.tz_minuteswest = 0;  // UTC timezone
         tz.tz_dsttime = 0;      // No DST information
         if (copyout(myproc()->pagetable, tz_addr, (char *)&tz, sizeof(tz)) < 0) {
-            return -1;  // EFAULT - Copy to user space failed
+            return -EFAULT;  // EFAULT - Copy to user space failed
         }
     }
 
@@ -223,7 +224,7 @@ uint64 sys_brk(void) {
 
     if (growproc(n - addr) < 0) {
         // printf("failed to growproc\n");
-        return -1;
+        return -ENOMEM;
     }
     // printf("ret:%p\n", myproc()->sz);
     return n;
@@ -248,7 +249,7 @@ uint64 sys_nanosleep(void) {
     argaddr(1, &rem_addr);
     struct timespec req, rem;
     if (copyin(myproc()->pagetable, (char *)(&req), req_addr, sizeof(req)) < 0) {
-        return -1;
+        return -EFAULT;
     }
     if (rem_addr != 0 && copyin(myproc()->pagetable, (char *)(&rem), rem_addr, sizeof(rem)) < 0) {
         // do nothing, as we don't write back to 'rem'
@@ -268,7 +269,7 @@ uint64 sys_nanosleep(void) {
     while (ticks - ticks0 < n) {
         if (killed(myproc())) {
             release(&tickslock);
-            return -1;
+            return -EINTR;
         }
         sleep(&ticks, &tickslock);
     }
@@ -291,7 +292,7 @@ uint64 sys_times(void) {
     argaddr(0, &tms_addr);
 
     if (tms_addr == 0) {
-        return -1;  // EFAULT - Invalid pointer
+        return -EFAULT;  // EFAULT - Invalid pointer
     }
 
     // Get current tick count for elapsed time calculation
@@ -314,7 +315,7 @@ uint64 sys_times(void) {
 
     // Copy the result to user space
     if (copyout(myproc()->pagetable, tms_addr, (char *)&times_buf, sizeof(times_buf)) < 0) {
-        return -1;  // EFAULT - Copy to user space failed
+        return -EFAULT;  // EFAULT - Copy to user space failed
     }
 
     // Return elapsed real time since an arbitrary point in the past
@@ -329,7 +330,7 @@ uint64 sys_uname(void) {
     argaddr(0, &utsname_addr);
 
     if (utsname_addr == 0) {
-        return -1;  // EFAULT - Invalid pointer
+        return -EFAULT;  // EFAULT - Invalid pointer
     }
 
     // Fill in the utsname structure with system information
@@ -350,7 +351,7 @@ uint64 sys_uname(void) {
 
     // Copy the result to user space
     if (copyout(myproc()->pagetable, utsname_addr, (char *)&uts, sizeof(uts)) < 0) {
-        return -1;  // EFAULT - Copy to user space failed
+        return -EFAULT;  // EFAULT - Copy to user space failed
     }
 
     return 0;  // Success
@@ -389,7 +390,7 @@ uint64 sys_mmap(void) {
         if (strcmp(myproc()->name, "git") == 0) {
             // printf("DEBUG: sys_mmap reject MAP_FIXED\n");
         }
-        return -1;
+        return -EINVAL;
     }
 
     if (sz == 0) {
@@ -404,7 +405,7 @@ uint64 sys_mmap(void) {
             if (strcmp(myproc()->name, "git") == 0) {
                 // printf("DEBUG: sys_mmap argfd failed (fd=%d)\n", fd);
             }
-            return -1;
+            return -EBADF;
         }
         if ((!get_fops()->readable(f) && (prot & (PROT_READ))) ||
             (!get_fops()->writable(f) && (prot & PROT_WRITE) && !(flags & MAP_PRIVATE))) {
@@ -412,7 +413,7 @@ uint64 sys_mmap(void) {
                 // printf("DEBUG: sys_mmap bad prot vs file perms (readable=%d writable=%d)\n",
                 // get_fops()->readable(f), get_fops()->writable(f));
             }
-            return -1;
+            return -EACCES;
         }
     }
     // For anonymous mapping (fd == -1), f remains NULL
@@ -472,16 +473,16 @@ uint64 sys_munmap(void) {
     uint64 addr, sz;
     argaddr(0, &addr);
     argaddr(1, &sz);
-    if (sz == 0) return -1;
+    if (sz == 0) return -EINVAL;
 
     struct proc *p = myproc();
 
     struct vma *v = findvma(p, addr);
-    if (v == 0) return -1;
+    if (v == 0) return -EINVAL;
 
     if (addr > v->addr && addr + sz < v->addr + v->length) {
         // dig a hole inside the memory range
-        return -1;
+        return -ENOMEM;
     }
 
     uint64 addr_aligned = addr;
@@ -533,7 +534,7 @@ uint64 sys_set_tid_address(void) {
     if (tidptr != 0) {
         int tid = p->pid;
         if (copyout(p->pagetable, tidptr, (char *)&tid, sizeof(tid)) < 0) {
-            return -1;  // EFAULT
+            return -EFAULT;  // EFAULT
         }
     }
 
@@ -554,7 +555,7 @@ uint64 sys_setuid(void) {
     argint(0, &uid);
 
     // 负数uid无效
-    if (uid < 0) return -1;
+    if (uid < 0) return -EINVAL;
 
     acquire(&p->lock);
 
@@ -577,7 +578,7 @@ uint64 sys_setuid(void) {
     }
 
     release(&p->lock);
-    return -1;  // EPERM
+    return -EPERM;
 }
 
 // getgid - 返回real group ID
@@ -593,7 +594,7 @@ uint64 sys_setgid(void) {
 
     argint(0, &gid);
 
-    if (gid < 0) return -1;
+    if (gid < 0) return -EINVAL;
 
     acquire(&p->lock);
 
@@ -614,7 +615,7 @@ uint64 sys_setgid(void) {
     }
 
     release(&p->lock);
-    return -1;  // EPERM
+    return -EPERM;
 }
 
 // geteuid - 获取effective user ID
@@ -656,7 +657,7 @@ uint64 sys_setreuid(void) {
         if ((ruid != -1 && ruid != p->uid && ruid != p->euid) ||
             (euid != -1 && euid != p->uid && euid != p->euid && euid != p->suid)) {
             release(&p->lock);
-            return -1;
+            return -EPERM;
         }
         if (ruid != -1) p->uid = new_ruid;
         if (euid != -1) p->euid = new_euid;
@@ -689,7 +690,7 @@ uint64 sys_setregid(void) {
         if ((rgid != -1 && rgid != p->gid && rgid != p->egid) ||
             (egid != -1 && egid != p->gid && egid != p->egid && egid != p->sgid)) {
             release(&p->lock);
-            return -1;
+            return -EPERM;
         }
         if (rgid != -1) p->gid = new_rgid;
         if (egid != -1) p->egid = new_egid;
@@ -713,14 +714,14 @@ uint64 sys_fcntl(void) {
     int new_fd;
     struct file *f;
     if (argfd(0, &fd, &f) < 0) {
-        return -1;
+        return -EBADF;
     }
     argint(1, &cmd);
     argint(2, &arg);
     switch (cmd) {
         case F_DUPFD:
             if ((fd = fdalloc2(f, arg)) < 0) {
-                return -1;
+                return fd;
             }
             get_fops()->dup(f);
             ret = fd;
@@ -763,7 +764,7 @@ uint64 sys_sendfile(void) {
     struct file *out_f, *in_f;
 
     if (argfd(0, &out_fd, &out_f) < 0 || argfd(1, &in_fd, &in_f) < 0) {
-        return -1;
+        return -EBADF;
     }
     argaddr(2, &poff);
     argint(3, &count);
@@ -784,12 +785,12 @@ uint64 sys_sendfile(void) {
     if (poff) {
         if ((nread = vfs_ext_readat(in_f, 0, (uint64)buf, count, offset)) < 0) {
             kfree(buf);
-            return -1;
+            return -EIO;
         }
     } else {
         if ((nread = vfs_ext_read(in_f, 0, (uint64)buf, count)) < 0) {
             kfree(buf);
-            return -1;
+            return -EIO;
         }
         count = MIN(count, nread);
         nread = 0;
@@ -799,24 +800,24 @@ uint64 sys_sendfile(void) {
         case FD_PIPE:
             if ((nwrite = pipewrite_kernel(out_f->f_pipe, (uint64)buf, count)) < 0) {
                 kfree(buf);
-                return -1;
+                return -EIO;
             }
             break;
         case FD_REG:
             if ((nwrite = vfs_ext_write(out_f, 0, (uint64)buf, count)) < 0) {
                 kfree(buf);
-                return -1;
+                return -EIO;
             }
             break;
         case FD_DEVICE:
             if ((nwrite = devsw[out_f->f_major].write(0, (uint64)buf, count)) < 0) {
                 kfree(buf);
-                return -1;
+                return -EIO;
             }
             break;
         default:
             kfree(buf);
-            return -1;
+            return -EINVAL;
     }
 
     offset += nread;
@@ -898,7 +899,7 @@ uint64 sys_ppoll(void) {
     struct proc *p = myproc();
 
     // Fast validation path
-    if (nfds > NOFILE) return -1;
+    if (nfds > NOFILE) return -EINVAL;
     if (nfds == 0) return 0;
 
     // Leverage buddy system: choose optimal allocation strategy
@@ -910,11 +911,11 @@ uint64 sys_ppoll(void) {
     } else {
         fds = kmalloc(fds_size);  // Use precise allocation for larger sizes
     }
-    if (!fds) return -1;
+    if (!fds) return -EFAULT;
 
     if (copyin(p->pagetable, (char *)fds, fds_addr, fds_size) < 0) {
         kfree(fds);
-        return -1;
+        return -EFAULT;
     }
 
     uint64 timeout_ticks = ppoll_calc(p, timeout_addr);
@@ -945,7 +946,7 @@ uint64 sys_ppoll(void) {
 
         if (ready_count > 0) break;
         if (timeout_ticks > 0 && ticks >= timeout_ticks) break;
-        if (killed(p)) { kfree(fds); return -1; }
+        if (killed(p)) { kfree(fds); return -EINTR; }
 
         // Sleep on the pipe's &pi->nread channel — matches wakeup in
         // pipewrite_kernel and pipeclose, so no timing race with writer.
@@ -981,33 +982,33 @@ uint64 sys_writev(void) {
 
     // 检查参数有效性
     if (fd < 0 || fd >= NOFILE || (f = myproc()->ofile[fd]) == 0) {
-        return -1;
+        return -EBADF;
     }
 
     if (iovcnt <= 0 || iovcnt > IOV_MAX) {  // IOV_MAX 通常为 1024
-        return -1;
+        return -EINVAL;
     }
 
     if (!get_fops()->writable(f)) {
-        return -1;
+        return -EBADF;
     }
 
     // 分配内核缓冲区来存储 iovec 数组
     struct iovec *iov = kalloc();
     if (!iov) {
-        return -1;
+        return -ENOMEM;
     }
 
     // 从用户空间复制 iovec 数组
     int iov_size = iovcnt * sizeof(struct iovec);
     if (iov_size > PGSIZE) {
         kfree(iov);
-        return -1;
+        return -EINVAL;
     }
 
     if (copyin(myproc()->pagetable, (char *)iov, iov_addr, iov_size) < 0) {
         kfree(iov);
-        return -1;
+        return -EFAULT;
     }
 
     // 逐个处理每个 iovec 并写入
@@ -1019,7 +1020,7 @@ uint64 sys_writev(void) {
 
         if (iov[i].iov_base == 0) {
             kfree(iov);
-            return -1;  // 无效的缓冲区指针
+            return -EFAULT;  // 无效的缓冲区指针
         }
 
         // 写入当前缓冲区
@@ -1052,14 +1053,14 @@ uint64 sys_set_robust_list(void) {
     // More flexible length validation - accept common glibc values
     // glibc may pass 24 (typical) or other values depending on version
     if (len > 128) {  // Reject obviously invalid lengths
-        return -1;    // EINVAL
+        return -EINVAL;    // EINVAL
     }
 
     // For non-zero head, validate it's in user address space
     if (head != 0) {
         // Simple check: ensure it's in user space range
         if (head >= MAXVA) {
-            return -1;  // EFAULT
+            return -EFAULT;  // EFAULT
         }
     }
 
@@ -1089,7 +1090,7 @@ uint64 sys_getrandom(void) {
     int total = 0;
     char *kpage = (char *)kalloc();
     if (kpage == 0) {
-        return -1;
+        return -ENOMEM;
     }
     while (total < buflen) {
         int chunk = buflen - total;
@@ -1107,7 +1108,7 @@ uint64 sys_getrandom(void) {
 
         if (copyout(p->pagetable, ubuf + total, kpage, chunk) < 0) {
             kfree(kpage);
-            return -1;
+            return -EFAULT;
         }
         total += chunk;
     }
@@ -1129,7 +1130,7 @@ uint64 sys_clock_gettime(void) {
         ts.tv_nsec = (timestamp % FREQUENCY) * 1000000000 / FREQUENCY;
         // printf("[sys_clock_gettime] sec: %d, nsec: %d\n", ts.sec, ts.nsec);
 
-        if (copyout(myproc()->pagetable, (uint64)addr, (char *)&ts, sizeof(ts)) < 0) return -1;
+        if (copyout(myproc()->pagetable, (uint64)addr, (char *)&ts, sizeof(ts)) < 0) return -EFAULT;
     }
     return 0;
 }
@@ -1140,7 +1141,7 @@ uint64 sys_fstatat(void) {
     uint64 st;
     argint(0, &dirfd);
     if (argstr(1, pathname, MAXPATH) < 0) {
-        return -1;
+        return -EINVAL;
     }
     // if (strcmp(pathname, "./basicx") == 0) {
     //   printf("-----------------\n");
@@ -1182,7 +1183,7 @@ uint64 sys_fstatat(void) {
             }
         }
         if (copyout(myproc()->pagetable, st, (char *)(&kbuf), sizeof(kbuf)) < 0) {
-            return -1;
+            return -EFAULT;
         }
     }
     return 0;
@@ -1196,7 +1197,7 @@ uint64 sys_syslog(void) {
     argaddr(1, &buf);
 
     if (type == 3) {
-        if (either_copyout(1, buf, syslogbuffer, bufferlength) < 0) return -1;
+        if (either_copyout(1, buf, syslogbuffer, bufferlength) < 0) return -EFAULT;
         return bufferlength;
     } else if (type == 3)
         return sizeof(syslogbuffer);
@@ -1212,7 +1213,7 @@ uint64 sys_sysinfo(void) {
     info.uptime = ticks;
     info.procs = countprocs();
     info.freeram = 0;
-    if (copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0) return -1;
+    if (copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0) return -EFAULT;
     return 0;
 }
 
@@ -1236,7 +1237,7 @@ uint64 sys_clock_nanosleep(void) {
     if (copyin(myproc()->pagetable, (char *)&req, req_addr, sizeof(req)) < 0) {
         // printf("[clock_nanosleep] PID=%d: EFAULT - failed to copy request timespec from user
         // space, returning -1\n", myproc()->pid);
-        return -1;  // EFAULT
+        return -EFAULT;  // EFAULT
     }
 
     // printf("[clock_nanosleep] PID=%d: raw timespec: tv_sec=%ld, tv_nsec=%ld\n",
@@ -1256,7 +1257,7 @@ uint64 sys_clock_nanosleep(void) {
         // printf("[clock_nanosleep] PID=%d: EINVAL - invalid timespec (sec=%ld, nsec=%ld),
         // returning -1\n",
         //        myproc()->pid, req.tv_sec, req.tv_nsec);
-        return -1;  // EINVAL
+        return -EINVAL;  // EINVAL
     }
 
     // Check for extremely large sleep times that would cause overflow
@@ -1291,7 +1292,7 @@ uint64 sys_clock_nanosleep(void) {
         clockid != CLOCK_MONOTONIC_RAW && clockid != CLOCK_BOOTTIME) {
         // printf("[clock_nanosleep] PID=%d: EINVAL - unsupported clock type %d, returning -1\n",
         // myproc()->pid, clockid);
-        return -1;  // EINVAL - unsupported clock
+        return -EINVAL;  // EINVAL - unsupported clock
     }
 
     // Calculate target time with overflow protection
@@ -1381,7 +1382,7 @@ uint64 sys_clock_nanosleep(void) {
                 }
                 copyout(myproc()->pagetable, rem_addr, (char *)&rem, sizeof(rem));
             }
-            return -1;  // EINTR
+            return -EINTR;  // EINTR
         }
 
         // Use tick-based sleep for efficiency when sleep time is long
@@ -1439,7 +1440,7 @@ uint64 sys_clock_nanosleep(void) {
                             }
                             copyout(myproc()->pagetable, rem_addr, (char *)&rem, sizeof(rem));
                         }
-                        return -1;  // EINTR
+                        return -EINTR;  // EINTR
                     }
                     sleep(&ticks, &tickslock);
                 }
@@ -1484,7 +1485,7 @@ uint64 sys_clock_nanosleep(void) {
                         }
                         copyout(myproc()->pagetable, rem_addr, (char *)&rem, sizeof(rem));
                     }
-                    return -1;  // EINTR
+                    return -EINTR;  // EINTR
                 }
                 // Allow other processes to run occasionally
                 if (busy_loop_count % 1000 == 0) {
@@ -1577,15 +1578,15 @@ uint64 sys_mprotect(void) {
     struct proc *p = myproc();
 
     if (len == 0) return 0;
-    if (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) return -1;
-    if (addr & (PGSIZE - 1)) return -1;
+    if (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) return -EINVAL;
+    if (addr & (PGSIZE - 1)) return -EINVAL;
     len = PGROUNDUP(len);
 
-    if (addr + len < addr) return -1;
+    if (addr + len < addr) return -EINVAL;
 
     for (uint64 va = addr; va < addr + len; va += PGSIZE) {
         pte_t *pte = walk(p->pagetable, va, 0);
-        if (pte == 0 || (*pte & PTE_V) == 0) return -1;
+        if (pte == 0 || (*pte & PTE_V) == 0) return -ENOMEM;
     }
 
     for (uint64 va = addr; va < addr + len; va += PGSIZE) {
@@ -1639,7 +1640,7 @@ uint64 sys_futex(void) {
         case FUTEX_WAKE:
             return futex_wake(uaddr, val);
         default:
-            return -1;  // ENOSYS equivalent
+            return -ENOSYS;  // ENOSYS equivalent
     }
 }
 
@@ -1667,18 +1668,18 @@ uint64 sys_copy_file_range(void) {
     // flags = %d\n", fd_in, fd_out, off_in, off_out, len, flags);
 
     if (len == 0) return 0;
-    if (flags != 0) return -1;  // flags always zero
+    if (flags != 0) return -EINVAL;  // flags always zero
 
-    if (argfd(0, &fd_in, &in_file) < 0) return -1;
-    if (argfd(2, &fd_out, &out_file) < 0) return -1;
+    if (argfd(0, &fd_in, &in_file) < 0) return -EBADF;
+    if (argfd(2, &fd_out, &out_file) < 0) return -EBADF;
 
-    if (!get_fops()->readable(in_file)) return -1;
-    if (!get_fops()->writable(out_file)) return -1;
+    if (!get_fops()->readable(in_file)) return -EBADF;
+    if (!get_fops()->writable(out_file)) return -EBADF;
 
     // printf("sys_copy_file_range: in_file->f_pos = %ld\n", in_file->f_pos);
     // printf("sys_copy_file_range: out_file->f_pos = %ld\n", out_file->f_pos);
 
-    if (in_file->f_type != FD_REG || out_file->f_type != FD_REG) return -1;
+    if (in_file->f_type != FD_REG || out_file->f_type != FD_REG) return -EINVAL;
     // file type always zero
 
     struct proc *p = myproc();
@@ -1691,7 +1692,7 @@ uint64 sys_copy_file_range(void) {
         update_in = 1;
     } else {
         if (copyin(p->pagetable, (char *)&current_off_in, off_in, sizeof(uint64)) < 0) {
-            return -1;
+            return -EFAULT;
         }
     }
 
@@ -1700,12 +1701,12 @@ uint64 sys_copy_file_range(void) {
         update_out = 1;
     } else {
         if (copyin(p->pagetable, (char *)&current_off_out, off_out, sizeof(uint64)) < 0) {
-            return -1;
+            return -EFAULT;
         }
     }
 
     void *buf = kmalloc(COPY_SIZE);
-    if (!buf) return -1;
+    if (!buf) return -ENOMEM;
 
     uint64 total_copied = 0;
     uint64 remaining = len;
@@ -1734,7 +1735,7 @@ uint64 sys_copy_file_range(void) {
 
         if (killed(p)) {
             kfree(buf);
-            return -1;
+            return -EINTR;
         }
     }
 
@@ -1776,9 +1777,9 @@ uint64 sys_ftruncate(void) {
     argint(0, &fd);
     argaddr(1, &length);
 
-    if (argfd(0, &fd, &f) < 0) return -1;
-    if (!get_fops()->writable(f)) return -1;
-    if (f->f_type != FD_REG) return -1;
+    if (argfd(0, &fd, &f) < 0) return -EBADF;
+    if (!get_fops()->writable(f)) return -EBADF;
+    if (f->f_type != FD_REG) return -EINVAL;
 
     return vfs_ext_ftruncate(f, length);
 }

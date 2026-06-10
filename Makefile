@@ -275,6 +275,11 @@ $U/_forktest-la: $U/forktest-la.o $(ULIB_LA)
 # that disk image changes after first build are persistent until clean.  More
 # details:
 # http://www.gnu.org/software/make/manual/html_node/Chained-Rules.html
+
+
+# Embedded glibc dynamic linker (for PT_INTERP support)
+
+
 .PRECIOUS: %-rv.o %-la.o
 
 # List of user programs to be included in the filesystem image

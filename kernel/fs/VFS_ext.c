@@ -2,6 +2,7 @@
 #include "platform.h"
 #include "defs.h"
 #include "time.h"
+#include "errno.h"
 #include "fs/fcntl.h"
 #include "fs/vfs/file.h"
 #include "fs/vfs/fs.h"
@@ -133,7 +134,7 @@ int vfs_ext_ioctl(struct file *f, int cmd, void *args) {
     int r = 0;
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     if (file == NULL) {
-        panic("vfs_ext_ioctl: cannot get ext4 file\n");
+        return -EBADF;  // 非 ext4 文件或无底层结构
     }
 
     switch (cmd) {
@@ -161,7 +162,7 @@ int vfs_ext_read(struct file *f, int user_addr, const uint64 addr, int n) {
     uint64 byteread = 0;
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     if (file == NULL) {
-        panic("vfs_ext_read: cannot get ext4 file\n");
+        return -EBADF;  // 非 ext4 文件或无底层结构
     }
     int r = 0;
     if (user_addr) {
@@ -223,7 +224,7 @@ int vfs_ext_readat(struct file *f, int user_addr, const uint64 addr, int n, int 
     uint64 byteread = 0;
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     if (file == NULL) {
-        panic("vfs_ext_read: cannot get ext4 file\n");
+        return -EBADF;  // 非 ext4 文件或无底层结构
     }
 
     // Save original file position
@@ -308,13 +309,13 @@ int vfs_ext_write(struct file *f, int user_addr, const uint64 addr, int n) {
     uint64 bytewrite = 0;
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     if (file == NULL) {
-        panic("vfs_ext_write: cannot get ext4 file\n");
+        return -EBADF;  // 非 ext4 文件或无底层结构
     }
     int r = 0;
     if (user_addr) {
         char *buf = kmalloc(n + 1);
         if (buf == NULL) {
-            panic("vfs_ext_read: kalloc failed\n");
+            panic("vfs_ext_write: kalloc failed\n");
         }
         if (copyin(myproc()->pagetable, buf, addr, n) != 0) {
             kfree(buf);
@@ -359,7 +360,7 @@ int vfs_ext_writeat(struct file *f, int user_addr, const uint64 addr, int n, int
     uint64 bytewrite = 0;
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     if (file == NULL) {
-        panic("vfs_ext_writeat: cannot get ext4 file\n");
+        return -EBADF;  // 非 ext4 文件或无底层结构
     }
 
     // Save original file position
@@ -467,10 +468,14 @@ int vfs_ext_flush(struct filesystem *fs) {
 
 int vfs_ext_lseek(struct file *f, int offset, int whence) {
     int r = 0;
+
+    // 对不支持 seek 的文件类型返回错误，而不是 panic
+    if (f->f_type == FD_PIPE)
+        return -ESPIPE;  // 管道不支持 lseek
+    if (f->f_type == FD_NONE || f->f_extfile == NULL)
+        return -EBADF;   // 无效文件或缺少 ext4 底层结构
+
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
-    if (file == NULL) {
-        panic("vfs_ext_lseek: cannot get ext4 file\n");
-    }
     if (whence == SEEK_END && offset < 0) {
         offset = -offset;
     }
@@ -664,7 +669,7 @@ int vfs_ext_fstat(struct file *f, struct kstat *st) {
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     struct ext4_inode_ref ref;
     if (file == NULL) {
-        panic("vfs_ext_fstat: cannot get ext4 file\n");
+        return -EBADF;  // 非 ext4 文件或无底层结构
     }
     int r = ext4_fs_get_inode_ref(&file->mp->fs, file->inode, &ref);
     if (r != EOK) {
@@ -712,7 +717,7 @@ int vfs_ext_statx(struct file *f, struct statx *st) {
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     struct ext4_inode_ref ref;
     if (file == NULL) {
-        panic("vfs_ext_fstat: cannot get ext4 file\n");
+        return -EBADF;  // 非 ext4 文件或无底层结构
     }
     int r = ext4_fs_get_inode_ref(&file->mp->fs, file->inode, &ref);
     if (r != EOK) {

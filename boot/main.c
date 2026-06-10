@@ -67,9 +67,7 @@ void main() {
         inodeinit();      // inode table
 
         vfs_ext4_init();     // 初始化lwext4
-        
         virtio_disk_init();  // emulated hard disk
-
         userinit();  // first user process
         __sync_synchronize();
 

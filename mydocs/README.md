@@ -28,3 +28,7 @@
 | `22-execve-enoexec-fix.md` | 🔧 execve 非 ELF 文件返回 ENOEXEC 修复实录：libctest run-dynamic.sh "Operation not permitted" 根因（内核 -1 → musl → EPERM → busybox 不 fallback）→ 4 处修改 → xv6 vs musl 返回值约定分析 | 2026-06-07 13:12 |
 | `23-proc-self-exe-fix.md` | 🔧 libctest 脚本执行链完整修复实录：EPERM→ENOEXEC（exec.c）→ busybox ash tryexec() 源码分析→发现用 /proc/self/exe 而非 /bin/sh→内核 5 文件实现 /proc/self/exe 虚拟路径→完整链路打通 | 2026-06-07 14:24 |
 | `24-proc-self-exe-clone-fix.md` | 🔧 /proc/self/exe 完整实现与 clone 修复：5 文件内核改动→发现 fork 子进程 exec_path 为空→定位 clone() 缺失拷贝→修复后 exec_path 正常→完整验证链路→lua 测试 9/11 通过 | 2026-06-07 15:00 |
+| `25-syscall-errno-interp-fix.md` | 🔧 系统调用 errno 语义修复 + 动态链接器支持：~190 处 syscall `return -1` → `-ERRNO`，execve AT_PHDR 修正，PT_INTERP 动态链接器加载，ld.so 嵌入内核 | 2026-06-09 03:23 |
+| `26-libctest-kernel-fixes.md` | 🔧 libc-test 内核修复：AT_PHDR 虚拟地址修正，clone CLONE_SETTLS / CLONE_THREAD / CLONE_CHILD_CLEARTID，rt_sigtimedwait 实现 | 2026-06-09 15:36 |
+| `27-libctest-musl-full.md` | ✅ libc-test musl 全量测试：直接 exec 方案实现 82/82 PASS，完整诊断 runtest.exe 失败根因（sigtimedwait/waitpid 链路） | 2026-06-09 16:36 |
+| `28-unimplemented-features-roadmap.md` | 🗺️ 未实现功能实现路线图：pthread/FUTEX/socket 等 4 个模块的逐步实现方案，含代码示例和优先级建议 | 2026-06-09 16:42 |

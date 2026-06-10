@@ -74,6 +74,7 @@ struct sig_context {
 struct sig_handlers {
     struct sigaction handlers[MAX_SIGNALS + 1];
     struct spinlock lock;  // 添加锁保护
+    int refcount;         // 引用计数，支持共享
 };
 
 // 信号操作宏 - 修改以使用新的成员名

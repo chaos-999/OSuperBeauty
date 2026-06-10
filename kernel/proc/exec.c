@@ -81,9 +81,11 @@ int execve(char *path, char **argv, char **envp) {
     // printf("execve: Loading %s, ELF entry point: 0x%lx\n", path, elf.entry);
 
     // Load program into memory.
+    uint64 first_load_vaddr = 0;
     for (i = 0, off = elf.phoff; i < elf.phnum; i++, off += sizeof(ph)) {
         if (ip->i_op->read(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph)) goto bad;
         if (ph.type != ELF_PROG_LOAD) continue;
+        if (first_load_vaddr == 0 || ph.vaddr < first_load_vaddr) first_load_vaddr = ph.vaddr;
         if (ph.memsz < ph.filesz) goto bad;
         if (ph.vaddr + ph.memsz < ph.vaddr) goto bad;
         uint64 sz1;
@@ -155,7 +157,7 @@ int execve(char *path, char **argv, char **envp) {
     int index = 0;
     AUXV(AT_HWCAP, 0);
     AUXV(AT_PAGESZ, PGSIZE);
-    AUXV(AT_PHDR, elf.phoff);
+    AUXV(AT_PHDR, first_load_vaddr + elf.phoff);
     AUXV(AT_PHENT, elf.phentsize);
     AUXV(AT_PHNUM, elf.phnum);
     AUXV(AT_BASE, 0);

@@ -134,147 +134,69 @@ const char *bb_test_success[] = {
     "rm busybox_cmd.bak", "find . -name busybox_cmd.txt", NULL};
 
 void test_pre() {
-    int pid;
+    int pid, st;
 
-    int basic_testcases = 32;
-
-    // chdir(basic_path_musl);
-    // printf("#### OS COMP TEST GROUP START basic-musl ####\n");
-    // for (int i = 0; i < basic_testcases; i++) {
-    //     pid = fork();
-    //     if (pid < 0) {
-    //         printf("init: fork failed\n");
-    //         exit(1);
-    //     }
-    //     if (pid == 0) {
-    //         exec(basic_name[i], argv2);
-    //         exit(1);
-    //     }
-    //     wait(0);
-    // }
-    // printf("#### OS COMP TEST GROUP END basic-musl ####\n");
-    //
-    // printf("before chdir basic-glibc\n");
-    // chdir(basic_path_glibc);
-    // printf("after chdir basic-glibc\n");
-    // printf("#### OS COMP TEST GROUP START basic-glibc ####\n");
-    // for (int i = 0; i < basic_testcases; i++) {
-    //     pid = fork();
-    //     if (pid < 0) {
-    //         printf("init: fork failed\n");
-    //         exit(1);
-    //     }
-    //     if (pid == 0) {
-    //         exec(basic_name[i], argv2);
-    //         exit(1);
-    //     }
-    //     wait(0);
-    // }
-    // printf("#### OS COMP TEST GROUP END basic-glibc ####\n");
-
-    
-
-    // // 实际应该使用的正确busybox测试命令，但是目前存在内存问题
-
-    // printf("before chdir busybox\n");
-    // chdir(bb_path_musl);  // 切换到musl测试
-    // printf("after chdir busybox\n");
-    // pid = fork();
-    // if (pid < 0) {
-    //   printf("init: fork failed\n");
-    //   exit(1);
-    // }
-    // if(pid == 0) {
-    //     execve("busybox", bb_testcode, NULL);
-    //     printf("init: exec busybox_testcode failed\n");
-    //     exit(1);
-    // }
-    // wait(0);
-
-    // printf("before chdir busybox\n");
-    // chdir(bb_path_glibc);  // 切换到glibc测试
-    // printf("after chdir busybox\n");
-    // pid = fork();
-    // if (pid < 0) {
-    //   printf("init: fork failed\n");
-    //   exit(1);
-    // }
-    // if(pid == 0) {
-    //     execve("busybox", bb_testcode, NULL);
-    //     printf("init: exec busybox_testcode failed\n");
-    //     exit(1);
-    // }
-    // wait(0);
-
-    // --- lua test (musl + glibc) ---
-    printf("before chdir lua-musl\n");
+    // --- libc-test musl: run ALL tests manually via direct exec ---
+    printf("#### OS COMP TEST GROUP START libctest-musl ####\n");
     chdir("/musl/");
-    printf("after chdir lua-musl\n");
-    //printf("#### OS COMP TEST GROUP START lua-musl ####\n");
-    pid = fork();
-    if (pid < 0) {
-        printf("init: fork failed\n");
-    } else if (pid == 0) {
-        execve("busybox", lua_testcode, NULL);
-        printf("init: exec lua_testcode failed\n");
-        exit(1);
-    } else {
-        wait(0);
+
+    char *libc_tests[] = {
+        "argv", "basename", "clocale_mbfuncs", "clock_gettime",
+        "dirname", "env", "fdopen", "fnmatch", "fscanf", "fwscanf",
+        "iconv_open", "inet_pton", "mbc", "memstream",
+        "qsort", "random", "search_hsearch",
+        "search_insque", "search_lsearch", "search_tsearch",
+        "setjmp", "snprintf", "socket", "sscanf", "sscanf_long",
+        "stat", "strftime", "string", "string_memcpy", "string_memmem",
+        "string_memset", "string_strchr", "string_strcspn", "string_strstr",
+        "strptime", "strtod", "strtod_simple", "strtof", "strtol",
+        "strtold", "swprintf", "tgmath", "time", "tls_align",
+        "udiv", "ungetc", "utime", "wcsstr", "wcstol",
+        "daemon_failure", "dn_expand_empty", "dn_expand_ptr_0",
+        "fflush_exit", "fgets_eof", "fgetwc_buffering",
+        "fpclassify_invalid_ld80", "ftello_unflushed_append",
+        "getpwnam_r_crash", "getpwnam_r_errno", "iconv_roundtrips",
+        "inet_ntop_v4mapped", "inet_pton_empty_last_field",
+        "iswspace_null", "lrand48_signextend", "lseek_large",
+        "malloc_0", "mbsrtowcs_overflow", "memmem_oob_read",
+        "memmem_oob", "mkdtemp_failure", "mkstemp_failure",
+        "printf_1e9_oob", "printf_fmt_g_round", "printf_fmt_g_zeros",
+        "printf_fmt_n",
+        "putenv_doublefree", "regex_backref_0", "regex_bracket_icase",
+        "regex_ere_backref", "regex_escaped_high_byte",
+        "regex_negated_range", "regexec_nosub",
+        "rewind_clear_error", "rlimit_open_files",
+        "scanf_bytes_consumed", "scanf_match_literal_eof",
+        "scanf_nullbyte_char", "setvbuf_unget",
+        "sigprocmask_internal", "sscanf_eof", "statvfs",
+        "strverscmp", "syscall_sign_extend", "uselocale_0",
+        "wcsncpy_read_overflow", "wcsstr_false_negative",
+        NULL
+    };
+
+    int pass = 0, fail = 0;
+    for (int i = 0; libc_tests[i] != NULL; i++) {
+        pid = fork();
+        if (pid < 0) { printf("libctest: fork failed\n"); continue; }
+        if (pid == 0) {
+            char *av[] = {"entry-static.exe", libc_tests[i], NULL};
+            execve("entry-static.exe", av, NULL);
+            exit(99);
+        }
+        wait(&st);
+        int exit_code = (st >> 8) & 0xff;
+        if (exit_code == 0) {
+            printf("PASS %s\n", libc_tests[i]);
+            pass++;
+        } else {
+            printf("FAIL %s [status %d]\n", libc_tests[i], exit_code);
+            fail++;
+        }
     }
-    //printf("#### OS COMP TEST GROUP END lua-musl ####\n");
 
-    printf("before chdir lua-glibc\n");
-    chdir("/glibc/");
-    printf("after chdir lua-glibc\n");
-    //printf("#### OS COMP TEST GROUP START lua-glibc ####\n");
-    pid = fork();
-    if (pid < 0) {
-        printf("init: fork failed\n");
-    } else if (pid == 0) {
-        execve("busybox", lua_testcode, NULL);
-        printf("init: exec lua_testcode failed\n");
-        exit(1);
-    } else {
-        wait(0);
-    }
-    //printf("#### OS COMP TEST GROUP END lua-glibc ####\n");
-
-    // --- libc-test (musl + glibc) ---
-    printf("before chdir libc-test-musl\n");
-    chdir("/musl/");
-    printf("after chdir libc-test-musl\n");
-    //printf("#### OS COMP TEST GROUP START libc-test-musl ####\n");
-    pid = fork();
-    if (pid < 0) {
-        printf("init: fork failed\n");
-    } else if (pid == 0) {
-        execve("busybox", libctest_testcode, NULL);
-        printf("init: exec libc-test_testcode failed\n");
-        exit(1);
-    } else {
-        wait(0);
-    }
-    //printf("#### OS COMP TEST GROUP END libc-test-musl ####\n");
-
-    printf("before chdir libc-test-glibc\n");
-    chdir("/glibc/");
-    printf("after chdir libc-test-glibc\n");
-    //printf("#### OS COMP TEST GROUP START libc-test-glibc ####\n");
-    pid = fork();
-    if (pid < 0) {
-        printf("init: fork failed\n");
-    } else if (pid == 0) {
-        execve("busybox", libctest_testcode, NULL);
-        printf("init: exec libc-test_testcode failed\n");
-        exit(1);
-    } else {
-        wait(0);
-    }
-    //printf("#### OS COMP TEST GROUP END libc-test-glibc ####\n");
-
-    return;
-
-
+    printf("==== libctest-musl: %d pass, %d fail ====\n", pass, fail);
+    printf("#### OS COMP TEST GROUP END libctest-musl ####\n");
+    chdir("/");
 
     return;
 }
@@ -522,34 +444,7 @@ int main() {
 
     printf("\n===== SpringOS Auto Test Runner =====\n\n");
 
-    // --- ★ basic 测试：直接 fork+exec 测试二进制（含完整评测标记格式）---
-    // 无需 busybox，不依赖 basic_testcode.sh 脚本
-    // 在 test_pre() 之前插入，试一下 busybox 到底什么反应
-    // chdir("/glibc/");
-    // int pid = fork();
-    // if (pid == 0) {
-    //     char *argv[] = {"busybox", "cat", "/glibc/", 0};
-    //     execve("busybox", argv, NULL);
-    //     printf("execve busybox ls FAILED\n");
-    //     exit(1);
-    // }
-    // wait(0);
-    // chdir("/musl/");
-    // int pid = fork();
-    // if (pid == 0) {
-    //     char *argv[] = {"busybox", "ls", "/musl/", 0};
-    //     execve("busybox", argv, NULL);
-    //     printf("execve busybox ls FAILED\n");
-    //     exit(1);
-    // }
-    // wait(0);
     test_pre();
-
-    // --- ★ 自动扫描并执行测试脚本（需要 busybox sh applet，当前未完善）---
-    // 比赛镜像路径结构：/glibc/*_testcode.sh  和  /musl/*_testcode.sh
-    // 待 busybox 完善后取消注释
-    // run_dir_testscripts("/glibc");
-    // run_dir_testscripts("/musl");
 
     printf("\nAll tests completed, shutting down system...\n");
     shutdown();

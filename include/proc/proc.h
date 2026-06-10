@@ -177,7 +177,9 @@ struct proc {
     void *chan;            // If non-zero, sleeping on chan
     int killed;            // If non-zero, have been killed
     int xstate;            // Exit status to be returned to parent's wait
-    int pid;               // Process ID
+    int pid;               // Process ID 
+    int tgid;              // Thread group ID
+    int tid;               // Thread ID
 
     // wait_lock must be held when using this:
     struct proc *parent;  // Parent process
@@ -197,6 +199,7 @@ struct proc {
     struct vma vmas[NVMA];        // Virtual Memory Areas for mmap
     uint64 clear_child_tid;       // Clear child tid
     uint64 robust_list_head;      // Robust futex list head
+    int pt_shared;                // Page table shared via CLONE_VM
     int uid;                      // Real user ID
     int euid;                     // Effective user ID
     int suid;                     // Saved set-user-ID
