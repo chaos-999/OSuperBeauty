@@ -12,3 +12,14 @@ basic/user/build/
 riscv-vf2/
 .judge_tmp_offline/
 2k1000la/
+
+# Debug artifacts
+gdb-la.gdb
+qemu-la
+qemu-system-loongarch64
+sdcard-la-*.img
+la-*.out
+eval-*.out
+os_serial_out_*.txt
+kernel-la
+kernel-rv
