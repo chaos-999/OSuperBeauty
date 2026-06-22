@@ -319,8 +319,20 @@ int execve(char *path, char **argv, char **envp) {
     if ((pagetable = proc_pagetable(p)) == 0) goto bad;
 
     uint64 start_vaddr = 0;
+    char interp_buf[MAXPATH] = {0};
+    uint64 interp_off = 0, interp_len = 0;
+
     for (i = 0, off = elf.phoff; i < elf.phnum; i++, off += sizeof(ph)) {
         if (ip->i_op->read(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph)) goto bad;
+
+        if (ph.type == ELF_PROG_INTERP) {
+            if (ph.filesz < MAXPATH) {
+                interp_off = ph.off;
+                interp_len = ph.filesz;
+            }
+            continue;
+        }
+
         if (ph.type == ELF_PROG_LOAD) {
             if (ph.memsz < ph.filesz) goto bad;
             if (ph.vaddr + ph.memsz < ph.vaddr) goto bad;
@@ -347,8 +359,102 @@ int execve(char *path, char **argv, char **envp) {
         }
     }
 
+    // Read PT_INTERP path if present
+    if (interp_len > 0) {
+        if (ip->i_op->read(ip, 0, (uint64)interp_buf, interp_off, interp_len) != (int)interp_len)
+            goto bad;
+        interp_buf[interp_len] = '\0';
+    }
+
     ip->i_op->unlock(ip);
     ip = 0;
+
+    // ---- Load dynamic linker (PT_INTERP) ----
+    uint64 interp_base = 0;
+    uint64 interp_entry = elf.entry;
+    int has_interp = (interp_len > 0);
+
+    if (has_interp) {
+        struct inode *lip = namei(interp_buf);
+
+        // Try fallback path: /glibc/lib/<basename>
+        if (lip == 0) {
+            char *bn = interp_buf;
+            for (char *p = interp_buf; *p; p++)
+                if (*p == '/') bn = p + 1;
+            char alt[MAXPATH];
+            safestrcpy(alt, "/glibc/lib/", MAXPATH);
+            safestrcpy(alt + 11, bn, MAXPATH - 11);
+            lip = namei(alt);
+        }
+        if (lip == 0) goto bad;
+
+        lip->i_op->lock(lip);
+        struct elfhdr lelf;
+        if (lip->i_op->read(lip, 0, (uint64)&lelf, 0, sizeof(lelf)) != sizeof(lelf))
+            goto bad_interp;
+        if (lelf.magic != ELF_MAGIC) goto bad_interp;
+
+        interp_base = 0x40000000;  // 1GB base, well above main binary
+
+        for (i = 0, off = lelf.phoff; i < lelf.phnum; i++, off += sizeof(ph)) {
+            if (lip->i_op->read(lip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph))
+                goto bad_interp;
+            if (ph.type != ELF_PROG_LOAD) continue;
+            if (ph.memsz < ph.filesz) goto bad_interp;
+
+            uint64 va = interp_base + ph.vaddr;
+            uint64 vend = va + ph.memsz;
+
+            // Map pages manually (no uvmalloc → p->sz untouched)
+            for (uint64 pg = PGROUNDDOWN(va); pg < PGROUNDUP(vend); pg += PGSIZE) {
+                char *mem = kalloc();
+                if (mem == 0) goto bad_interp;
+                memset(mem, 0, PGSIZE);
+                if (mappages(pagetable, pg, PGSIZE, (uint64)mem,
+                            PTE_P | PTE_W | PTE_PLV | PTE_MAT | PTE_D) < 0) {
+                    kfree(mem);
+                    goto bad_interp;
+                }
+            }
+
+            // Copy file data
+            uint64 fend = va + ph.filesz;
+            for (uint64 pg = PGROUNDDOWN(va); pg < PGROUNDUP(fend); pg += PGSIZE) {
+                uint64 pa = walkaddr(pagetable, pg);
+                if (pa == 0) goto bad_interp;
+                uint64 skip = (pg < va) ? (va - pg) : 0;
+                uint64 foff = ph.off + (pg - PGROUNDDOWN(va));
+                uint n = PGSIZE - skip;
+                if (pg + skip + n > fend) n = fend - (pg + skip);
+                if (lip->i_op->read(lip, 0, (uint64)pa + skip, foff, n) != (int)n)
+                    goto bad_interp;
+            }
+
+            // Zero BSS
+            if (ph.memsz > ph.filesz) {
+                uint64 bss = va + ph.filesz;
+                for (uint64 pg = PGROUNDDOWN(bss); pg < vend; pg += PGSIZE) {
+                    uint64 pa = walkaddr(pagetable, pg);
+                    if (pa == 0) continue;
+                    uint64 off = (pg < bss) ? (bss - pg) : 0;
+                    uint64 len = PGSIZE - off;
+                    if (pg + len > vend) len = vend - pg;
+                    memset((void*)((uint64)pa + off), 0, len);
+                }
+            }
+        }
+
+        interp_entry = interp_base + lelf.entry;
+        lip->i_op->unlock(lip);
+        lip = 0;
+        goto interp_done;
+
+    bad_interp:
+        if (lip) lip->i_op->unlock(lip);
+        goto bad;
+    }
+interp_done:
 
     p = myproc();
     uint64 oldsz = p->sz;
@@ -401,6 +507,12 @@ int execve(char *path, char **argv, char **envp) {
     aux[2] = 0;  // 初始化
     alloc_aux(aux, AT_PAGESZ, PGSIZE);
     alloc_aux(aux, AT_ENTRY, elf.entry);
+    if (has_interp) {
+        alloc_aux(aux, AT_BASE, interp_base);
+        alloc_aux(aux, AT_PHDR, elf.phoff);
+        alloc_aux(aux, AT_PHENT, elf.phentsize);
+        alloc_aux(aux, AT_PHNUM, elf.phnum);
+    }
     alloc_aux(aux, AT_UID, p->uid);
     alloc_aux(aux, AT_EUID, has_setuid ? file_uid : p->euid);
     alloc_aux(aux, AT_GID, p->gid);
@@ -478,7 +590,7 @@ int execve(char *path, char **argv, char **envp) {
     p->sz = sz;
 
     // 设置寄存器：设置 PC 与 SP；同时填充 a0/a1/a2 以满足 LA/Linux 约定
-    p->trapframe->era = elf.entry;
+    p->trapframe->era = interp_entry;
     p->trapframe->sp = final_sp;
     p->trapframe->a0 = argc;
     p->trapframe->a1 = argv_ptr;
