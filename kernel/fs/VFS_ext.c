@@ -617,7 +617,20 @@ int vfs_ext_stat(const char *path, struct kstat *st) {
     const char *statpath;
     statpath = path;
 
-    // printf("vfs_ext_stat: checking path [%s]\n", statpath);
+    // Resolve symlinks (follow up to 8 levels)
+    char resolved_stat[MAXPATH];
+    strncpy(resolved_stat, statpath, MAXPATH - 1);
+    resolved_stat[MAXPATH - 1] = '\0';
+    for (int depth = 0; depth < 8; depth++) {
+        char link_tgt[MAXPATH];
+        size_t rcnt = 0;
+        int sr = ext4_readlink(resolved_stat, link_tgt, MAXPATH - 1, &rcnt);
+        if (sr != 0) break;
+        link_tgt[rcnt] = '\0';
+        strncpy(resolved_stat, link_tgt, MAXPATH - 1);
+        resolved_stat[MAXPATH - 1] = '\0';
+    }
+    statpath = resolved_stat;
 
     if (strcmp(statpath, "/sbin/ls") == 0) {
         return vfs_ext_stat("/musl/busybox", st);

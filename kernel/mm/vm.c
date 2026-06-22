@@ -458,7 +458,14 @@ void freewalk(pagetable_t pagetable) {
             freewalk((pagetable_t)child);
             pagetable[i] = 0;
         } else if (pte & PTE_V) {
-            panic("freewalk: leaf");
+            // Leaf page still mapped (e.g. interpreter pages) - free it
+#ifdef RISCV
+            uint64 pa = PTE2PA(pte);
+#elif defined(LOONGARCH)
+            uint64 pa = (PTE2PA(pte) | DMWIN_MASK);
+#endif
+            kfree((void *)pa);
+            pagetable[i] = 0;
         }
     }
 

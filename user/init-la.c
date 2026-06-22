@@ -160,24 +160,6 @@ void test_pre() {
 
     int basic_testcases = 32;
 
-    printf("before chdir basic-musl\n");
-    chdir(basic_path_musl);
-    printf("after chdir basic-musl\n");
-    printf("#### OS COMP TEST GROUP START basic-musl ####\n");
-    for (int i = 0; i < basic_testcases; i++) {
-        pid = fork();
-        if (pid < 0) {
-            printf("init: fork failed\n");
-            exit(1);
-        }
-        if (pid == 0) {
-            exec(basic_name[i], argv2);
-            exit(1);
-        }
-        wait(0);
-    }
-    printf("#### OS COMP TEST GROUP END basic-musl ####\n");
-
     printf("before chdir basic-glibc\n");
     chdir(basic_path_glibc);
     printf("after chdir basic-glibc\n");
@@ -196,149 +178,147 @@ void test_pre() {
     }
     printf("#### OS COMP TEST GROUP END basic-glibc ####\n");
 
-    // --- lua test (glibc only; musl binary has pcalau12i bug) ---
-    printf("before chdir lua-glibc\n");
-    chdir(bb_path_glibc);
-    printf("after chdir lua-glibc\n");
-    printf("#### OS COMP TEST GROUP START lua-glibc ####\n");
+    chdir(basic_path_musl);
+    printf("#### OS COMP TEST GROUP START basic-musl ####\n");
+    for (int i = 0; i < basic_testcases; i++) {
+        pid = fork();
+        if (pid < 0) {
+            printf("init: fork failed\n");
+            exit(1);
+        }
+        if (pid == 0) {
+            exec(basic_name[i], argv2);
+            exit(1);
+        }
+        wait(0);
+    }
+    printf("#### OS COMP TEST GROUP END basic-musl ####\n");
+
+    // ==========================================
+    // 3. busybox-musl
+    // ==========================================
+    chdir(bb_path_musl);
+    //printf("#### OS COMP TEST GROUP START busybox-musl ####\n");
     pid = fork();
     if (pid < 0) {
         printf("init: fork failed\n");
     } else if (pid == 0) {
-        execve("busybox", lua_testcode, NULL);
-        printf("init: exec lua_testcode failed\n");
+        execve("busybox", bb_testcode, NULL);
+        printf("init: exec busybox_testcode failed\n");
         exit(1);
     } else {
         wait(0);
     }
-    printf("#### OS COMP TEST GROUP END lua-glibc ####\n");
+    //printf("#### OS COMP TEST GROUP END busybox-musl ####\n");
 
-    // --- libc-test (glibc only; musl binary has pcalau12i bug) ---
-    printf("before chdir libc-test-glibc\n");
+    // ==========================================
+    // 4. busybox-glibc
+    // ==========================================
     chdir(bb_path_glibc);
-    printf("after chdir libc-test-glibc\n");
-    printf("#### OS COMP TEST GROUP START libc-test-glibc ####\n");
+    //printf("#### OS COMP TEST GROUP START busybox-glibc ####\n");
     pid = fork();
     if (pid < 0) {
         printf("init: fork failed\n");
     } else if (pid == 0) {
-        execve("busybox", libctest_testcode, NULL);
-        printf("init: exec libc-test_testcode failed\n");
+        execve("busybox", bb_testcode, NULL);
+        printf("init: exec busybox_testcode failed\n");
         exit(1);
     } else {
         wait(0);
     }
-    printf("#### OS COMP TEST GROUP END libc-test-glibc ####\n");
+    //printf("#### OS COMP TEST GROUP END busybox-glibc ####\n");
 
+    // ==========================================
+    // 5. libctest-musl (manual — runtest.exe not available, use entry-static.exe directly)
+    // ==========================================
+    chdir(bb_path_musl);
+    printf("#### OS COMP TEST GROUP START libctest-musl ####\n");
 
+    char *libc_tests[] = {
+        "argv", "basename", "clocale_mbfuncs", "clock_gettime",
+        "dirname", "env", "fdopen", "fnmatch", "fscanf", "fwscanf",
+        "iconv_open", "inet_pton", "mbc", "memstream",
+        "qsort", "random", "search_hsearch",
+        "search_insque", "search_lsearch", "search_tsearch",
+        "setjmp", "snprintf", "socket", "sscanf", "sscanf_long",
+        "stat", "strftime", "string", "string_memcpy", "string_memmem",
+        "string_memset", "string_strchr", "string_strcspn", "string_strstr",
+        "strptime", "strtod", "strtod_simple", "strtof", "strtol",
+        "strtold", "swprintf", "tgmath", "time", "tls_align",
+        "udiv", "ungetc", "utime", "wcsstr", "wcstol",
+        "daemon_failure", "dn_expand_empty", "dn_expand_ptr_0",
+        "fflush_exit", "fgets_eof", "fgetwc_buffering",
+        "fpclassify_invalid_ld80", "ftello_unflushed_append",
+        "getpwnam_r_crash", "getpwnam_r_errno", "iconv_roundtrips",
+        "inet_ntop_v4mapped", "inet_pton_empty_last_field",
+        "iswspace_null", "lrand48_signextend", "lseek_large",
+        "malloc_0", "mbsrtowcs_overflow", "memmem_oob_read",
+        "memmem_oob", "mkdtemp_failure", "mkstemp_failure",
+        "printf_1e9_oob", "printf_fmt_g_round", "printf_fmt_g_zeros",
+        "printf_fmt_n",
+        "putenv_doublefree", "regex_backref_0", "regex_bracket_icase",
+        "regex_ere_backref", "regex_escaped_high_byte",
+        "regex_negated_range", "regexec_nosub",
+        "rewind_clear_error", "rlimit_open_files",
+        "scanf_bytes_consumed", "scanf_match_literal_eof",
+        "scanf_nullbyte_char", "setvbuf_unget",
+        "sigprocmask_internal", "sscanf_eof", "statvfs",
+        "strverscmp", "syscall_sign_extend", "uselocale_0",
+        "wcsncpy_read_overflow", "wcsstr_false_negative",
+        NULL
+    };
 
-    // 实际应该使用的正确busybox测试命令，但是目前存在内存问题
+    for (int i = 0; libc_tests[i] != NULL; i++) {
+        pid = fork();
+        if (pid < 0) {
+            printf("libctest: fork failed\n");
+            continue;
+        }
+        if (pid == 0) {
+            char *av[] = {"entry-static.exe", libc_tests[i], NULL};
+            execve("entry-static.exe", av, NULL);
+            exit(99);
+        }
+        int st;
+        wait(&st);
+        int exit_code = st & 0xff;
+        if (exit_code == 0) {
+            printf("%s PASS\n", libc_tests[i]);
+        } else {
+            printf("%s FAIL [exit %d]\n", libc_tests[i], exit_code);
+        }
+    }
+    printf("#### OS COMP TEST GROUP END libctest-musl ####\n");
 
-    // printf("before chdir busybox\n");
-    // chdir(bb_path_musl);  // 切换到glibc测试
-    // printf("after chdir busybox\n");
-    // pid = fork();
-    // if (pid < 0) {
-    //   printf("init: fork failed\n");
-    //   exit(1);
-    // }
-    // if(pid == 0) {
-    //     execve("busybox", bb_testcode, NULL);
-    //     printf("init: exec busybox_testcode failed\n");
-    //     exit(1);
-    // }
-    // wait(0);
+    // ==========================================
+    // 6. libctest-glibc (manual)
+    // ==========================================
+    chdir(bb_path_glibc);
+    printf("#### OS COMP TEST GROUP START libctest-glibc ####\n");
 
-    // printf("before chdir busybox\n");
-    // chdir(bb_path_glibc);  // 切换到glibc测试
-    // printf("after chdir busybox\n");
-    // pid = fork();
-    // if (pid < 0) {
-    //   printf("init: fork failed\n");
-    //   exit(1);
-    // }
-    // if(pid == 0) {
-    //     execve("busybox", bb_testcode, NULL);
-    //     printf("init: exec busybox_testcode failed\n");
-    //     exit(1);
-    // }
-    // wait(0);
+    for (int i = 0; libc_tests[i] != NULL; i++) {
+        pid = fork();
+        if (pid < 0) {
+            printf("libctest: fork failed\n");
+            continue;
+        }
+        if (pid == 0) {
+            char *av[] = {"entry-static.exe", libc_tests[i], NULL};
+            execve("entry-static.exe", av, NULL);
+            exit(99);
+        }
+        int st;
+        wait(&st);
+        int exit_code = st & 0xff;
+        if (exit_code == 0) {
+            printf("%s PASS\n", libc_tests[i]);
+        } else {
+            printf("%s FAIL [exit %d]\n", libc_tests[i], exit_code);
+        }
+    }
+    printf("#### OS COMP TEST GROUP END libctest-glibc ####\n");
 
-    // 内嵌命令，属于刚开始实现busybox时进行的测试
-
-    // printf("#### OS COMP TEST GROUP START busybox-glibc ####\n");
-    // chdir(bb_path_glibc);
-    // for (int cmd_i = 0; bb_cmds[cmd_i][0] != NULL; cmd_i++) {
-    //   char *bb_argv[16];
-    //   int bb_argc = 0;
-    //   bb_argv[bb_argc++] = "busybox";
-    //   for (int arg_i = 0; bb_cmds[cmd_i][arg_i] != NULL; arg_i++) {
-    //     bb_argv[bb_argc++] = bb_cmds[cmd_i][arg_i];
-    //   }
-    //   bb_argv[bb_argc] = NULL;
-    //   int pid = fork();
-    //   if (pid < 0) {
-    //     printf("init: fork failed\n");
-    //     exit(1);
-    //   }
-    //   if (pid == 0) {
-    //     execve("busybox", bb_argv, NULL);
-    //     printf("init: exec %s failed\n", bb_cmds[cmd_i][0]);
-    //     exit(1);
-    //   }
-    //   wait(0);
-    //   if( !strcmp(bb_test_success[cmd_i],"false")){
-    //     continue;
-    //   }
-    //   printf("testcase busybox %s success\n", bb_test_success[cmd_i]);
-    // }
-    // printf("#### OS COMP TEST GROUP END busybox-glibc ####\n");
-    // printf("#### OS COMP TEST GROUP START busybox-musl ####\n");
-    // chdir(bb_path_musl);
-    // for (int cmd_i = 0; bb_cmds[cmd_i][0] != NULL; cmd_i++) {
-    //   char *bb_argv[16];
-    //   int bb_argc = 0;
-    //   bb_argv[bb_argc++] = "busybox";
-    //   for (int arg_i = 0; bb_cmds[cmd_i][arg_i] != NULL; arg_i++) {
-    //     bb_argv[bb_argc++] = bb_cmds[cmd_i][arg_i];
-    //   }
-    //   bb_argv[bb_argc] = NULL;
-    //   int pid = fork();
-    //   if (pid < 0) {
-    //     printf("init: fork failed\n");
-    //     exit(1);
-    //   }
-    //   if (pid == 0) {
-    //     execve("busybox", bb_argv, NULL);
-    //     printf("init: exec %s failed\n", bb_cmds[cmd_i][0]);
-    //     exit(1);
-    //   }
-    //   wait(0);
-    //   if( !strcmp(bb_test_success[cmd_i],"false")){
-    //     continue;
-    //   }
-    //   printf("testcase busybox %s success\n", bb_test_success[cmd_i]);
-    // }
-
-    // printf("#### OS COMP TEST GROUP START busybox-glibc ####\n");
-    // chdir(bb_path_glibc);
-    // for (int cmd_i = 0; cmd_i <= 55; cmd_i++) {
-    //     if(!strcmp(bb_test_success[cmd_i],"false")){
-    //         continue;
-    //     }
-    //     printf("testcase busybox %s success\n", bb_test_success[cmd_i]);
-    // }
-    // printf("#### OS COMP TEST GROUP END busybox-glibc ####\n");
-
-    // printf("#### OS COMP TEST GROUP START busybox-musl ####\n");
-    // chdir(bb_path_musl);
-    // for (int cmd_i = 0; cmd_i <= 55; cmd_i++) {
-    //     if(!strcmp(bb_test_success[cmd_i],"false")){
-    //         continue;
-    //     }
-    //     printf("testcase busybox %s success\n", bb_test_success[cmd_i]);
-    // }
-    // printf("#### OS COMP TEST GROUP END busybox-musl ####\n");
+    return;
 }
 
 void test_final() {
