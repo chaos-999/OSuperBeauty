@@ -150,6 +150,8 @@ found:
     p->sgid = 0;
     p->killed = 0;  // ensure known initial state
     p->exec_path[0] = '\0';
+    p->console_buf_pos = 0;
+    memset(p->console_buf, 0, sizeof(p->console_buf));
     for (int i = 0; i < NOFILE; i++) {
         p->ofile[i] = 0;
     }

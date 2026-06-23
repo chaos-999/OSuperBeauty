@@ -373,7 +373,7 @@ int execve(char *path, char **argv, char **envp) {
     // ---- Load dynamic linker (PT_INTERP) ----
     uint64 interp_base = 0;
     uint64 interp_entry = elf.entry;
-    int has_interp = 1;  // force
+    int has_interp = (interp_len > 0);
 
     if (has_interp) {
         struct inode *lip = namei(interp_buf);
