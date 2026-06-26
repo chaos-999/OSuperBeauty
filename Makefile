@@ -438,7 +438,7 @@ boot/rv/initcode-sh.o: boot/rv/initcode-sh.S $U/initcode-rv-sh
 boot/la/initcode-sh.o: boot/la/initcode-sh.S $U/initcode-la-sh
 	$(CC_LA) $(CFLAGS_LA) -c -o $@ $<
 
-all: kernel-rv kernel-la
+all: kernel-la
 
 clean: 
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \

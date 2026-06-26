@@ -15,7 +15,8 @@ char basic_path_musl[] = "/musl/basic/";
 char basic_path_glibc[] = "/glibc/basic/";
 char bb_path_musl[] = "/musl/";
 char bb_path_glibc[] = "/glibc/";
-char *bb_testcode[10] = {"busybox", "sh", "busybox_testcode.sh", NULL};
+// bb_testcode moved to local in test_pre() to avoid global corruption
+// char *bb_testcode[10] = {"busybox", "sh", "busybox_testcode.sh", NULL};
 char *interrupts_testcode[10] = {"busybox", "sh", "interrupts_testcode.sh", NULL};
 char *copy_file_range_testcode[10] = {"busybox", "sh", "copy-file-range_testcode.sh", NULL};
 char *splice_testcode[10] = {"busybox", "sh", "splice_testcode.sh", NULL};
@@ -135,6 +136,7 @@ const char *bb_test_success[] = {
 
 void test_pre() {
     int pid;
+    char *bb_testcode_local[] = {"busybox", "sh", "busybox_testcode.sh", NULL};
 
     int basic_testcases = 32;
 
@@ -175,18 +177,19 @@ void test_pre() {
     // ==========================================
     // 3. busybox-musl
     // ==========================================
-    chdir(bb_path_musl);
+    int tmp = chdir(bb_path_musl);
+    printf("chdir to %s returned %d\n", bb_path_musl, tmp);
     //printf("#### OS COMP TEST GROUP START busybox-musl ####\n");
     pid = fork();
     if (pid < 0) {
         printf("init: fork failed\n");
-    } else if (pid == 0) {
-        execve("busybox", bb_testcode, NULL);
-        printf("init: exec busybox_testcode failed\n");
-        exit(1);
-    } else {
-        wait(0);
     }
+    if (pid == 0) {
+        int tmp = execve("busybox", bb_testcode_local, NULL);
+        printf("init: exec busybox_testcode failed exit code%d\n",tmp);
+        exit(1);
+    } 
+    wait(0);
     //printf("#### OS COMP TEST GROUP END busybox-musl ####\n");
 
     // ==========================================
@@ -198,7 +201,7 @@ void test_pre() {
     if (pid < 0) {
         printf("init: fork failed\n");
     } else if (pid == 0) {
-        execve("busybox", bb_testcode, NULL);
+        execve("busybox", bb_testcode_local, NULL);
         printf("init: exec busybox_testcode failed\n");
         exit(1);
     } else {
