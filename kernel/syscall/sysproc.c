@@ -338,14 +338,14 @@ uint64 sys_uname(void) {
     memset(&uts, 0, sizeof(uts));
 
     // Set system information
-    strncpy(uts.sysname, "SpringOS", sizeof(uts.sysname) - 1);
-    strncpy(uts.nodename, "SpringOS-node", sizeof(uts.nodename) - 1);
+    strncpy(uts.sysname, "OSuperbeauty", sizeof(uts.sysname) - 1);
+    strncpy(uts.nodename, "OSuperbeauty-node", sizeof(uts.nodename) - 1);
     strncpy(uts.release, "4.19.0", sizeof(uts.release) - 1);
 #ifdef RISCV
-    strncpy(uts.version, "SpringOS-riscv", sizeof(uts.version) - 1);
+    strncpy(uts.version, "OSuperbeauty-riscv", sizeof(uts.version) - 1);
     strncpy(uts.machine, "riscv64", sizeof(uts.machine) - 1);
 #elif defined(LOONGARCH)
-    strncpy(uts.version, "SpringOS-loongarch", sizeof(uts.version) - 1);
+    strncpy(uts.version, "OSuperbeauty-loongarch", sizeof(uts.version) - 1);
     strncpy(uts.machine, "loongarch64", sizeof(uts.machine) - 1);
 #endif
 
