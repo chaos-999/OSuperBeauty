@@ -102,6 +102,7 @@ sudo docker run --rm --privileged -v $(pwd):/src -w /src \
 - [xv6-vf2](https://github.com/michaelengel/xv6-vf2)：xv6移植VisionFive2的实现，OSuperbeauty参考了xv6-vf2移植VisionFive2开发板的启动实现，重构了中断异常处理和启动逻辑
 - [network-for-xv6-riscv](https://github.com/wusskk/network-for-xv6-riscv?tab=readme-ov-file)：xv6增加网络模块的实现，OSuperbeauty参考了network-for-xv6-riscv关于网络部分的实现，新增发送和接收缓冲区功能，TCP发送和接收函数，DNS解析功能
 - [lwext4](https://github.com/gkostka/lwext4): 轻量级EXT4文件系统库，用于现代文件系统支持
+- [SpringOS](https://gitlab.eduxiji.net/educg-group-36002-2710490/T202510558995330-264)：2025优秀参赛作品，OSuperbeauty参考了部分内核实现，并在此基础上做了针对测试集的评测优化
 
 ## 参考资料
 
