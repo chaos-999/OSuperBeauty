@@ -162,13 +162,15 @@ void test_pre() {
             execve("entry-static.exe", av, NULL);
             exit(99);
         }
+        printf("========== START %s %s ==========\n", "", libc_tests[i]);
         int st; wait(&st);
         int exit_code = st & 0xff;
         if (exit_code == 0) {
-            printf("%s PASS\n", libc_tests[i]);
+            printf("Pass!\n");
         } else {
-            printf("%s FAIL [exit %d]\n", libc_tests[i], exit_code);
+            printf("FAIL %s [status %d]\n", libc_tests[i], exit_code);
         }
+        printf("========== END %s %s ==========\n", "", libc_tests[i]);
     }
     printf("#### OS COMP TEST GROUP END libctest-musl ####\n");
 
