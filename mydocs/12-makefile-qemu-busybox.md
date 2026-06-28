@@ -193,6 +193,7 @@ cd ~/my-springos
 
 # 解压到当前目录（或者用 -c 管道 + 重定向）
 gzip -dc /home/chaos/oscomp-testdata/sdcard-rv.img.gz > sdcard-rv.img
+gzip -dc /home/chaos/oscomp-testdata/sdcard-la.img.gz > sdcard-la.img
 # 得到 sdcard-rv.img（约 4GB）
 
 # 或者也可以先复制再解压（需要 2 倍空间）：

@@ -447,7 +447,7 @@ clean:
 	*/*/*/*-rv.o */*/*/*-la.o \
 	$U/initcode-rv $U/initcode-la $U/initcode-rv.out $U/initcode-la.out \
 	$U/initcode-rv-sh $U/initcode-la-sh $U/initcode-rv-sh.out $U/initcode-la-sh.out \
-	 kernel-rv kernel-la \
+	 kernel-la \
 	kernel-rv.asm kernel-la.asm \
 	kernel-rv.sym kernel-la.sym \
 	kernel-rv-sh kernel-la-sh kernel-rv-sh.asm kernel-la-sh.asm \
