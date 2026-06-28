@@ -218,6 +218,19 @@ qemu-system-riscv64 \
   -drive file=sdcard-rv.img,if=none,format=raw,id=x0 \
   -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
   -no-reboot
+
+  qemu-system-loongarch64 \
+    -machine virt \
+    -kernel kernel-la \
+    -m 1G \
+    -nographic \
+    -smp 1 \
+    -drive file=sdcard-la.img,if=none,format=raw,id=x0 \
+    -device virtio-blk-pci,drive=x0 \
+    -no-reboot \
+    -device virtio-net-pci,netdev=net0 \
+    -netdev user,id=net0 \
+    -rtc base=utc
 ```
 
 ### 2.2 逐参数讲解

@@ -5,18 +5,102 @@
 队伍成员：陈浩男 张朔瑜 张佳安琪
 指导教师：文艳军
 
-yet still not Ready to write
+## 快速开始
 
+### 编译
+
+```bash
+# RISC-V 内核
+make kernel-rv -j$(nproc)
+
+# LoongArch 内核
+make kernel-la -j$(nproc)
+```
+
+### 本地运行
+
+```bash
+# RISC-V
+make qemu
+
+# LoongArch（需要 Docker，因为 Ubuntu 22.04 的 QEMU 6.2 不支持 LoongArch）
+make qemu-la
+```
+
+等价原始 QEMU 命令：
+
+```bash
+# RISC-V
+qemu-system-riscv64 -machine virt -kernel kernel-rv -m 256M -nographic -smp 1 \
+  -bios default -drive file=sdcard-rv.img,if=none,format=raw,id=x0 \
+  -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 -no-reboot
+
+# LoongArch
+qemu-system-loongarch64 -machine virt -kernel kernel-la -m 1G -nographic -smp 1 \
+  -drive file=sdcard-la.img,if=none,format=raw,id=x0 \
+  -device virtio-blk-pci,drive=x0 -no-reboot \
+  -device virtio-net-pci,netdev=net0 -netdev user,id=net0 -rtc base=utc
+```
+
+### 本地测评（模拟线上评分）
+
+```bash
+# RISC-V 完整测评
+make test
+
+# LoongArch 完整测评
+make test-la
+```
+
+等价 Docker 命令：
+
+```bash
+# 测评（编译 + 运行 + 评分）
+sudo docker run --rm \
+  -v $(pwd):/coursegrader/submit \
+  -v /path/to/oscomp-testdata:/coursegrader/testdata \
+  -v /path/to/autotest-for-oskernel:/cg \
+  -v /path/to/oscomp-testdata:/mnt/cghook/ \
+  zhouzhouyi/os-contest:20260510 python3 /cg/kernel.zip
+
+# 仅编译（使用 Docker 中的交叉编译器）
+sudo docker run --rm -v $(pwd):/src -w /src \
+  zhouzhouyi/os-contest:20260510 \
+  make kernel-la -j$(nproc)
+
+# 仅运行（使用 Docker 中的 QEMU）
+sudo docker run --rm --privileged -v $(pwd):/src -w /src \
+  zhouzhouyi/os-contest:20260510 \
+  qemu-system-loongarch64 -machine virt -kernel kernel-la -m 1G -nographic \
+    -drive file=sdcard-la.img,if=none,format=raw,id=x0 \
+    -device virtio-blk-pci,drive=x0 -no-reboot \
+    -device virtio-net-pci,netdev=net0 -netdev user,id=net0 -rtc base=utc
+```
+
+### Makefile 目标速查
+
+| 目标 | 说明 |
+|------|------|
+| `make kernel-rv` | 编译 RISC-V 内核 |
+| `make kernel-la` | 编译 LoongArch 内核 |
+| `make kernel-rv-sh` | 编译 RISC-V 内核（sh 变体） |
+| `make kernel-la-sh` | 编译 LoongArch 内核（sh 变体） |
+| `make qemu` / `qemu-la` | 编译 + 运行 QEMU |
+| `make qemu-gdb` / `qemu-gdb-la` | 编译 + GDB 调试 |
+| `make test` / `test-la` | 本地测评（Docker） |
+| `make clean` | 清理编译产物 |
+| `make clean-test` | 清理测评临时文件 |
+| `make tags` | 生成 etags 符号表 |
 
 ## 参考项目
 
 本项目基于以下开源项目：
 
-- [xv6-riscv](https://github.com/mit-pdos/xv6-riscv) : MIT的教学操作系统，提供了基础的内核框架，SpringOS以xv6-riscv为baseline进行重构开发，重构了项目结构，优化启动流程和底层驱动，重构了内存管理，新增信号机制和Futex
-- [xv6-loongarch-exp](https://github.com/SKT-CPUOS/xv6-loongarch-exp) : xv6的龙芯版本实现，SpringOS参考了xv6-loongarch-exp龙芯架构的实现，重构底层驱动，重构龙芯版本执行流程，按照龙芯2K1000LA处理器文档增加上板启动脚本，重构地址映射
-- [cabbageOS](https://gitlab.eduxiji.net/T202410487992456/cabbageos)：2024优秀参赛作品，SpringOS参考了VFS以及EXT4文件系统实现
-- [xv6-vf2](https://github.com/michaelengel/xv6-vf2)：xv6移植VisionFive2的实现，SpringOS参考了xv6-vf2移植VisionFive2开发板的启动实现，重构了中断异常处理和启动逻辑
-- [network-for-xv6-riscv](https://github.com/wusskk/network-for-xv6-riscv?tab=readme-ov-file)：xv6增加网络模块的实现，SpringOS参考了network-for-xv6-riscv关于网络部分的实现，新增发送和接收缓冲区功能，TCP发送和接收函数，DNS解析功能
+- [xv6-riscv](https://github.com/mit-pdos/xv6-riscv) : MIT的教学操作系统，提供了基础的内核框架，OSuperbeauty以xv6-riscv为baseline进行重构开发，重构了项目结构，优化启动流程和底层驱动，重构了内存管理，新增信号机制和Futex
+- [xv6-loongarch-exp](https://github.com/SKT-CPUOS/xv6-loongarch-exp) : xv6的龙芯版本实现，OSuperbeauty参考了xv6-loongarch-exp龙芯架构的实现，重构底层驱动，重构龙芯版本执行流程，按照龙芯2K1000LA处理器文档增加上板启动脚本，重构地址映射
+- [cabbageOS](https://gitlab.eduxiji.net/T202410487992456/cabbageos)：2024优秀参赛作品，OSuperbeauty参考了VFS以及EXT4文件系统实现
+- [xv6-vf2](https://github.com/michaelengel/xv6-vf2)：xv6移植VisionFive2的实现，OSuperbeauty参考了xv6-vf2移植VisionFive2开发板的启动实现，重构了中断异常处理和启动逻辑
+- [network-for-xv6-riscv](https://github.com/wusskk/network-for-xv6-riscv?tab=readme-ov-file)：xv6增加网络模块的实现，OSuperbeauty参考了network-for-xv6-riscv关于网络部分的实现，新增发送和接收缓冲区功能，TCP发送和接收函数，DNS解析功能
 - [lwext4](https://github.com/gkostka/lwext4): 轻量级EXT4文件系统库，用于现代文件系统支持
 
 ## 参考资料
@@ -30,4 +114,4 @@ yet still not Ready to write
 
 ## 许可证
 
-/kernel/fs/lwext4 和 /include/fs/ext4 目录下的文件采用 GPL-2.0 许可证，这使得整个 SpringOS 也采用 [GPL-2.0](https://opensource.org/license/gpl-2-0) 许可证
+/kernel/fs/lwext4 和 /include/fs/ext4 目录下的文件采用 GPL-2.0 许可证，这使得整个 OSuperbeauty 也采用 [GPL-2.0](https://opensource.org/license/gpl-2-0) 许可证

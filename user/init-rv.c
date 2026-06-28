@@ -543,7 +543,7 @@ int main() {
         close(fd);
     }
 
-    printf("\n===== SpringOS Auto Test Runner =====\n\n");
+    printf("\n===== OSuperbeauty Auto Test Runner =====\n\n");
 
     // // ★ 创建动态链接器路径（musl busybox 等动态链接程序需要）
     // mkdirat(AT_FDCWD, "/lib", 0755);

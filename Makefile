@@ -534,7 +534,7 @@ clean-testlog:
 # 一键测评：先清理残留 img，再构建并运行测评
 # 使用方式: make test
 # 如需指定架构: make test-rv  或  make test-la
-test: clean-test kernel-rv sdcard-rv.img
+test: clean-test sdcard-rv.img
 	docker run --rm \
 		-v $(PWD):/coursegrader/submit \
 		-v /home/zhangshuoyu/oscomp-testdata:/coursegrader/testdata \

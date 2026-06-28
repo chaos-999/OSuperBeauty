@@ -331,6 +331,13 @@ void uvmfirst(pagetable_t pagetable, uchar *src, uint sz) {
     mappages(pagetable, 2 * PGSIZE, PGSIZE, (uint64)mem, PTE_W | PTE_R | PTE_X | PTE_U);
     if (sz > 2 * PGSIZE) {
         memmove(mem, (uchar *)((uint64)src + 2 * PGSIZE), MIN(sz - 2 * PGSIZE, PGSIZE));
+
+    mem = kalloc();
+    memset(mem, 0, PGSIZE);
+    mappages(pagetable, 3 * PGSIZE, PGSIZE, (uint64)mem, PTE_W | PTE_R | PTE_X | PTE_U);
+    if (sz > 3 * PGSIZE) {
+        memmove(mem, (uchar *)((uint64)src + 3 * PGSIZE), MIN(sz - 3 * PGSIZE, PGSIZE));
+    }
     }
 #elif defined(LOONGARCH)
     char *mem;
@@ -369,6 +376,18 @@ void uvmfirst(pagetable_t pagetable, uchar *src, uint sz) {
 #endif
     if (sz > 2 * PGSIZE) {
         memmove(mem, (uchar *)((uint64)src + 2 * PGSIZE), MIN(sz - 2 * PGSIZE, PGSIZE));
+    }
+
+    mem = kalloc();
+    memset(mem, 0, PGSIZE);
+#ifdef LA2K1000
+    mappages(pagetable, 3 * PGSIZE, PGSIZE, (uint64)mem,
+             PTE_W | PTE_MAT | PTE_PLV | PTE_D | PTE_P | PTE_U);
+#else
+    mappages(pagetable, 3 * PGSIZE, PGSIZE, (uint64)mem, PTE_W | PTE_MAT | PTE_PLV | PTE_D | PTE_P);
+#endif
+    if (sz > 3 * PGSIZE) {
+        memmove(mem, (uchar *)((uint64)src + 3 * PGSIZE), MIN(sz - 3 * PGSIZE, PGSIZE));
     }
 #endif
 }

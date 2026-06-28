@@ -38,122 +38,6 @@ char *copy_file_range_name[] = {"copy-file-range-test-1", "copy-file-range-test-
 char *splice_name[] = {"test_splice"};
 char *test_args[] = {"1", "2", "3", "4", "5"};
 
-char *bb_cmds[][10] = {
-    // {"echo", "#### independent command test", NULL},
-    // {"ash", "-c", "exit", NULL},
-    // {"sh", "-c", "exit", NULL},
-    // {"basename", "/aaa/bbb", NULL},
-    // {"cal", NULL},
-    // {"clear", NULL},
-    // {"date", NULL},
-    // {"df", NULL},
-    // {"dirname", "/aaa/bbb", NULL},
-    // {"dmesg", NULL},
-    // {"du", NULL},
-    // {"expr", "1", "+", "1", NULL},
-    // {"false", NULL},
-    // {"true", NULL},
-    // {"which", "ls", NULL},
-    // {"uname", NULL},
-    // {"uptime", NULL},
-    // {"printf", "abc\\n", NULL},
-    // {"ps", NULL},
-    // {"pwd", NULL},
-    // {"free", NULL},
-    // {"hwclock", NULL},
-    // {"kill", "10", NULL},
-    // {"ls", NULL},
-    // {"sleep", "1", NULL},
-    // {"echo", "#### file operation test", NULL},
-    // {"touch", "test.txt", NULL},
-    {"ls", NULL},
-    {"sh", "interrupts_testcode.sh", NULL},
-    // {"echo \"hello world\" > test.txt", NULL},
-    // {"cat", "test.txt", NULL},
-    // {"cut", "-c", "3", "test.txt", NULL},
-    // {"od", "test.txt", NULL},
-    // {"head", "test.txt", NULL},
-    // {"tail", "test.txt", NULL},
-    // {"hexdump", "-C", "test.txt", NULL},
-    // {"md5sum", "test.txt", NULL},
-    // {"echo 'ccccccc' >> test.txt", NULL},
-    // {"echo 'bbbbbbb' >> test.txt", NULL},
-    // {"echo 'aaaaaaa' >> test.txt", NULL},
-    // {"echo '2222222' >> test.txt", NULL},
-    // {"echo '1111111' >> test.txt", NULL},
-    // {"echo 'bbbbbbb' >> test.txt", NULL},
-    // {"sort test.txt | busybox uniq", NULL},
-    // {"stat", "test.txt", NULL},
-    // {"strings", "test.txt", NULL},
-    // {"wc", "test.txt", NULL},
-    // {"[ -f test.txt ]", NULL},
-    // {"more", "test.txt", NULL},
-    // {"rm", "test.txt", NULL},
-    // {"mkdir", "test_dir", NULL},
-    // {"mv", "test_dir", "test", NULL},
-    // {"rmdir", "test", NULL},
-    // {"grep", "hello", "busybox_cmd.txt", NULL},
-    // {"cp", "busybox_cmd.txt", "busybox_cmd.bak", NULL},
-    // {"rm", "busybox_cmd.bak", NULL},
-    // {"find", ".", "-name", "busybox_cmd.txt", NULL},
-    {NULL}};
-
-const char *bb_test_success[] = {"echo \"#### independent command test\"",
-                                 "ash -c exit",
-                                 "sh -c exit",
-                                 "basename /aaa/bbb",
-                                 "cal",
-                                 "clear",
-                                 "date",
-                                 "df",
-                                 "dirname /aaa/bbb",
-                                 "dmesg",
-                                 "du",
-                                 "expr 1 + 1",
-                                 "false",
-                                 "true",
-                                 "which ls",
-                                 "uname",
-                                 "uptime",
-                                 "printf \"abc\\n\"",
-                                 "ps",
-                                 "pwd",
-                                 "free",
-                                 "hwclock",
-                                 "kill 10",
-                                 "ls",
-                                 "sleep 1",
-                                 "echo \"#### file operation test\"",
-                                 "touch test.txt",
-                                 "echo \"hello world\" > test.txt",
-                                 "cat test.txt",
-                                 "cut -c 3 test.txt",
-                                 "od test.txt",
-                                 "head test.txt",
-                                 "tail test.txt",
-                                 "hexdump -C test.txt",
-                                 "md5sum test.txt",
-                                 "echo 'ccccccc' >> test.txt",
-                                 "echo 'bbbbbbb' >> test.txt",
-                                 "echo 'aaaaaaa' >> test.txt",
-                                 "echo '2222222' >> test.txt",
-                                 "echo '1111111' >> test.txt",
-                                 "echo 'bbbbbbb' >> test.txt",
-                                 "sort test.txt | busybox uniq",
-                                 "stat test.txt",
-                                 "strings test.txt",
-                                 "wc test.txt",
-                                 "[ -f test.txt ]",
-                                 "more test.txt",
-                                 "rm test.txt",
-                                 "mkdir test_dir",
-                                 "mv test_dir test",
-                                 "rmdir test",
-                                 "grep hello busybox_cmd.txt",
-                                 "cp busybox_cmd.txt busybox_cmd.bak",
-                                 "rm busybox_cmd.bak",
-                                 "find . -name busybox_cmd.txt",
-                                 NULL};
 
 void test_pre() {
     int pid;
@@ -233,8 +117,6 @@ void test_pre() {
     // ==========================================
     // 5. libctest-musl
     // ==========================================
-    chdir(bb_path_musl);
-    printf("#### OS COMP TEST GROUP START libctest-musl ####\n");
 
     char *libc_tests[] = {
         "argv", "basename", "clocale_mbfuncs", "clock_gettime",
@@ -270,19 +152,17 @@ void test_pre() {
         NULL
     };
 
+    chdir(bb_path_musl);
+    printf("#### OS COMP TEST GROUP START libctest-musl ####\n");
     for (int i = 0; libc_tests[i] != NULL; i++) {
         pid = fork();
-        if (pid < 0) {
-            printf("libctest: fork failed\n");
-            continue;
-        }
+        if (pid < 0) { printf("libctest: fork failed\n"); continue; }
         if (pid == 0) {
             char *av[] = {"entry-static.exe", libc_tests[i], NULL};
             execve("entry-static.exe", av, NULL);
             exit(99);
         }
-        int st;
-        wait(&st);
+        int st; wait(&st);
         int exit_code = st & 0xff;
         if (exit_code == 0) {
             printf("%s PASS\n", libc_tests[i]);
@@ -293,24 +173,19 @@ void test_pre() {
     printf("#### OS COMP TEST GROUP END libctest-musl ####\n");
 
     // ==========================================
-    // 6. libctest-glibc (manual)
+    // 6. libctest-glibc
     // ==========================================
     chdir(bb_path_glibc);
     printf("#### OS COMP TEST GROUP START libctest-glibc ####\n");
-
     for (int i = 0; libc_tests[i] != NULL; i++) {
         pid = fork();
-        if (pid < 0) {
-            printf("libctest: fork failed\n");
-            continue;
-        }
+        if (pid < 0) { printf("libctest: fork failed\n"); continue; }
         if (pid == 0) {
             char *av[] = {"entry-static.exe", libc_tests[i], NULL};
             execve("entry-static.exe", av, NULL);
             exit(99);
         }
-        int st;
-        wait(&st);
+        int st; wait(&st);
         int exit_code = st & 0xff;
         if (exit_code == 0) {
             printf("%s PASS\n", libc_tests[i]);
@@ -320,81 +195,6 @@ void test_pre() {
     }
     printf("#### OS COMP TEST GROUP END libctest-glibc ####\n");
 
-
-
-    // printf("#### OS COMP TEST GROUP START busybox-glibc ####\n");
-    // chdir(bb_path_glibc);
-    // for (int cmd_i = 0; bb_cmds[cmd_i][0] != NULL; cmd_i++) {
-    //   char *bb_argv[16];
-    //   int bb_argc = 0;
-    //   bb_argv[bb_argc++] = "busybox";
-    //   for (int arg_i = 0; bb_cmds[cmd_i][arg_i] != NULL; arg_i++) {
-    //     bb_argv[bb_argc++] = bb_cmds[cmd_i][arg_i];
-    //   }
-    //   bb_argv[bb_argc] = NULL;
-    //   int pid = fork();
-    //   if (pid < 0) {
-    //     printf("init: fork failed\n");
-    //     exit(1);
-    //   }
-    //   if (pid == 0) {
-    //     execve("busybox", bb_argv, NULL);
-    //     printf("init: exec %s failed\n", bb_cmds[cmd_i][0]);
-    //     exit(1);
-    //   }
-    //   wait(0);
-    //   if( !strcmp(bb_test_success[cmd_i],"false")){
-    //     continue;
-    //   }
-    //   printf("testcase busybox %s success\n", bb_test_success[cmd_i]);
-    // }
-    // printf("#### OS COMP TEST GROUP END busybox-glibc ####\n");
-    // printf("#### OS COMP TEST GROUP START busybox-musl ####\n");
-    // chdir(bb_path_musl);
-    // for (int cmd_i = 0; bb_cmds[cmd_i][0] != NULL; cmd_i++) {
-    //   char *bb_argv[16];
-    //   int bb_argc = 0;
-    //   bb_argv[bb_argc++] = "busybox";
-    //   for (int arg_i = 0; bb_cmds[cmd_i][arg_i] != NULL; arg_i++) {
-    //     bb_argv[bb_argc++] = bb_cmds[cmd_i][arg_i];
-    //   }
-    //   bb_argv[bb_argc] = NULL;
-    //   int pid = fork();
-    //   if (pid < 0) {
-    //     printf("init: fork failed\n");
-    //     exit(1);
-    //   }
-    //   if (pid == 0) {
-    //     execve("busybox", bb_argv, NULL);
-    //     printf("init: exec %s failed\n", bb_cmds[cmd_i][0]);
-    //     exit(1);
-    //   }
-    //   wait(0);
-    //   if( !strcmp(bb_test_success[cmd_i],"false")){
-    //     continue;
-    //   }
-    //   printf("testcase busybox %s success\n", bb_test_success[cmd_i]);
-    // }
-
-    // printf("#### OS COMP TEST GROUP START busybox-glibc ####\n");
-    // chdir(bb_path_glibc);
-    // for (int cmd_i = 0; cmd_i <= 55; cmd_i++) {
-    //     if(!strcmp(bb_test_success[cmd_i],"false")){
-    //         continue;
-    //     }
-    //     printf("testcase busybox %s success\n", bb_test_success[cmd_i]);
-    // }
-    // printf("#### OS COMP TEST GROUP END busybox-glibc ####\n");
-
-    // printf("#### OS COMP TEST GROUP START busybox-musl ####\n");
-    // chdir(bb_path_musl);
-    // for (int cmd_i = 0; cmd_i <= 55; cmd_i++) {
-    //     if(!strcmp(bb_test_success[cmd_i],"false")){
-    //         continue;
-    //     }
-    //     printf("testcase busybox %s success\n", bb_test_success[cmd_i]);
-    // }
-    // printf("#### OS COMP TEST GROUP END busybox-musl ####\n");
 }
 
 void test_final() {

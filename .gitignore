@@ -22,4 +22,3 @@ la-*.out
 eval-*.out
 os_serial_out_*.txt
 kernel-la
-kernel-rv

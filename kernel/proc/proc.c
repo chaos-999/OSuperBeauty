@@ -325,11 +325,11 @@ void userinit(void) {
     // allocate one user page and copy initcode's instructions
     // and data into it.
     uvmfirst(p->pagetable, initcode_start, initcode_end - initcode_start);
-    p->sz = 3 * PGSIZE;
+    p->sz = PGROUNDUP((uint64)(initcode_end - initcode_start));
 
     // prepare for the very first "return" from kernel to user.
     p->trapframe->epc = 0;          // user program counter
-    p->trapframe->sp = 3 * PGSIZE;  // user stack pointer
+    p->trapframe->sp = PGROUNDUP((uint64)(initcode_end - initcode_start));  // user stack pointer
 
     safestrcpy(p->name, "initcode", sizeof(p->name));
     p->cwd.fs = get_fs_by_type(EXT4);
@@ -347,16 +347,16 @@ void userinit(void) {
     // allocate one user page and copy initcode's instructions
     // and data into it.
     uvmfirst(p->pagetable, initcode_start, initcode_end - initcode_start);
-    p->sz = 3 * PGSIZE;
+    p->sz = PGROUNDUP((uint64)(initcode_end - initcode_start));
 
     // prepare for the very first "return" from kernel to user.
 #ifndef LA2K1000
     p->trapframe->era = 0;          // user program counter
-    p->trapframe->sp = 3 * PGSIZE;  // user stack pointer
+    p->trapframe->sp = PGROUNDUP((uint64)(initcode_end - initcode_start));  // user stack pointer
 #else
     // 2K1000：确保 era 指向用户已映射页（从 0 开始），sp 指向用户栈顶
     p->trapframe->era = 0;
-    p->trapframe->sp = 3 * PGSIZE;
+    p->trapframe->sp = PGROUNDUP((uint64)(initcode_end - initcode_start));
 #endif
 
     safestrcpy(p->name, "initcode", sizeof(p->name));

@@ -32,3 +32,13 @@
 | `26-libctest-kernel-fixes.md` | 🔧 libc-test 内核修复：AT_PHDR 虚拟地址修正，clone CLONE_SETTLS / CLONE_THREAD / CLONE_CHILD_CLEARTID，rt_sigtimedwait 实现 | 2026-06-09 15:36 |
 | `27-libctest-musl-full.md` | ✅ libc-test musl 全量测试：直接 exec 方案实现 82/82 PASS，完整诊断 runtest.exe 失败根因（sigtimedwait/waitpid 链路） | 2026-06-09 16:36 |
 | `28-unimplemented-features-roadmap.md` | 🗺️ 未实现功能实现路线图：pthread/FUTEX/socket 等 4 个模块的逐步实现方案，含代码示例和优先级建议 | 2026-06-09 16:42 |
+| `29-p2p3p4-implementation-and-false-pass.md` | 🔧 内核 panic 修复 & 假 PASS 诊断：施工记录 + 诊断报告 | 2026-06-10 |
+| `30-libctest-classification-false-pass.md` | 📊 libc-test 全测试分类 & 假 PASS 归因：96 个测试逐类分析 | 2026-06-10 |
+| `31-presentfailure-fix-guide.md` | 🔧 逐测试修复指南：基于 presentfailure 日志，每个假 PASS 的根因和修复方案 | 2026-06-11 |
+| `32-ltp-full-manual.md` | 📚 LTP 测试套件完整手册：分类、数量、测试目标 | 2026-06-12 |
+| `33-ltp-dynamic-linking-problem.md` | 🔍 LTP 动态链接问题：诊断与解决方案 | 2026-06-13 |
+| `34-eval-debug-summary.md` | 📋 测评调试总结 (6/25-6/28)：所有问题、根因、修复方案的汇总文档 | 2026-06-28 15:17 |
+| `35-initcode-12kb-overflow-fix.md` | 🔧 Initcode 12KB 溢出修复：uvmfirst 加第 4 页 + p->sz 动态计算，解决 LA basic test 全部崩溃 | 2026-06-28 15:20 |
+| `36-rv-bb-testcode-fix.md` | 🔧 RV busybox argv 损坏修复：bb_testcode 全局→局部变量 | 2026-06-28 15:21 |
+| `37-ext4-lru-use-after-free.md` | 🔍 RV ext4 块缓存 LRU 树 Use-After-Free 分析：ext4_journal inc_ref 绕过 LRU 维护 | 2026-06-28 15:21 |
+| `38-la-busybox-musl-silent-exit.md` | 🔍 LA busybox-musl 静默退出诊断：musl pcalau12i 工具链 bug，非内核问题 | 2026-06-28 15:22 |

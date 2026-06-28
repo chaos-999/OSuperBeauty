@@ -12,7 +12,7 @@
 volatile static int started = 0;
 volatile static int boot_hart = -1;  // 用于存储引导核心的HART ID
 
-void print_springos_banner(void) {
+void print_osuperbeauty_banner(void) {
     printf_highlight("\033[91m", " _____   ____                                   __                                __ \n");
     printf_highlight("\033[91m", "/\\  __`\\/\\  _`\\                                /\\ \\                              /\\ \\__ \n");
     printf_highlight("\033[91m", "\\ \\ \\/\\ \\ \\,\\L\\_\\  __  __  _____      __   _ __\\ \\ \\____     __     __     __  __\\ \\ ,_\\  __  __ \n");
@@ -26,7 +26,7 @@ void print_springos_banner(void) {
     printf_highlight("\033[91m", "                                                                                                   \n");
 }
 
-void print_springos_banner2(void) {
+void print_osuperbeauty_banner2(void) {
     printf_highlight("\033[91m", " _____   ____                                   __                                __ \n");
     printf_highlight("\033[91m", "/\\  __`\\/\\  _`\\                                /\\ \\                              /\\ \\__ \n");
     printf_highlight("\033[91m", "\\ \\ \\/\\ \\ \\,\\L\\_\\  __  __  _____      __   _ __\\ \\ \\____     __     __     __  __\\ \\ ,_\\  __  __ \n");
@@ -52,7 +52,7 @@ void main() {
         consoleinit();
         printfinit();
         printf("\n");
-        print_springos_banner();
+        print_osuperbeauty_banner();
         printf("\n");
         kinit();         // physical page allocator
         kvminit();       // create kernel page table
@@ -88,7 +88,7 @@ void main() {
         consoleinit();
         printfinit();
         printf("\n");
-        print_springos_banner2();
+        print_osuperbeauty_banner2();
         printf("\n");
 
         virtio_probe();
