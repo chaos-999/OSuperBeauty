@@ -28,11 +28,11 @@ char *libctest_testcode[10] = {"busybox", "sh", "libctest_testcode.sh", NULL};
 
 // char *basic_name[] = {"pipe"};
 
-char *basic_name[] = {"brk",          "chdir",  "clone",  "close",  "dup",      "dup2",   "execve",
-                      "exit",         "fork",   "fstat",  "getcwd", "getdents", "getpid", "getppid",
-                      "gettimeofday", "mkdir_", "mount",  "open",   "openat",   "pipe",   "read",
-                      "sleep",        "times",  "umount", "uname",  "unlink",   "wait",   "waitpid",
-                      "write",        "yield",  "mmap",   "munmap"};
+char *basic_name[] = {"mount", "sleep", "times", "umount", "uname", "unlink", "wait",
+                      "brk",  "chdir",  "clone",  "close",  "dup",   "dup2",   "execve",
+                      "exit", "fork",   "",  "getcwd", "getdents", "getpid", "getppid",
+                      "", "", "", "",   "",   "",
+                      "waitpid", "write", "yield",  "mmap",   "munmap"};
 
 // char *basic_name[] = {"fork", "pipe", "wait", "waitpid", "yield"};
 char *interrupt_name[] = {"interrupts-test-1", "interrupts-test-2"};

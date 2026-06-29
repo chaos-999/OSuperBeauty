@@ -325,11 +325,11 @@ void userinit(void) {
     // allocate one user page and copy initcode's instructions
     // and data into it.
     uvmfirst(p->pagetable, initcode_start, initcode_end - initcode_start);
-    p->sz = PGROUNDUP((uint64)(initcode_end - initcode_start));
+    p->sz = 4 * PGSIZE;
 
     // prepare for the very first "return" from kernel to user.
     p->trapframe->epc = 0;          // user program counter
-    p->trapframe->sp = PGROUNDUP((uint64)(initcode_end - initcode_start));  // user stack pointer
+    p->trapframe->sp = 4 * PGSIZE;  // user stack pointer
 
     safestrcpy(p->name, "initcode", sizeof(p->name));
     p->cwd.fs = get_fs_by_type(EXT4);
