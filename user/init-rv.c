@@ -300,44 +300,6 @@ int main() {
 
     printf("\n===== OSuperbeauty Auto Test Runner =====\n\n");
 
-    // // ★ 创建动态链接器路径（musl busybox 等动态链接程序需要）
-    // mkdirat(AT_FDCWD, "/lib", 0755);
-    // symlinkat("/musl/lib/libc.so", AT_FDCWD, "/lib/ld-musl-riscv64.so.1");
-    // symlinkat("/musl/lib/libc.so", AT_FDCWD, "/lib/ld-musl-riscv64-sf.so.1");
-
-    // // ★ 为 LTP 测试脚本创建必要的命令符号链接
-    // symlinkat("/musl/busybox", AT_FDCWD, "/bin/basename");
-    // symlinkat("/musl/busybox", AT_FDCWD, "/bin/dirname");
-    // symlinkat("/musl/busybox", AT_FDCWD, "/bin/sh");
-    // symlinkat("/musl/busybox", AT_FDCWD, "/bin/cat");
-    // symlinkat("/musl/busybox", AT_FDCWD, "/bin/echo");
-    // symlinkat("/musl/busybox", AT_FDCWD, "/bin/ls");
-    // symlinkat("/musl/busybox", AT_FDCWD, "/bin/grep");
-    // symlinkat("/musl/busybox", AT_FDCWD, "/bin/wc");
-    // symlinkat("/musl/busybox", AT_FDCWD, "/bin/test");
-    // symlinkat("/musl/busybox", AT_FDCWD, "/bin/[");
-
-    // // 运行 LTP 测试
-    // chdir("/musl");
-    // int pid = fork();
-    // if (pid == 0) {
-    //     char *ltp_argv[] = {"busybox", "sh", "ltp_testcode.sh", NULL};
-    //     char *ltp_env[] = {"PATH=/bin:/musl:/glibc", NULL};
-    //     execve("/musl/busybox", ltp_argv, ltp_env);
-    //     printf("execve ltp_testcode.sh FAILED\n");
-    //     exit(1);
-    // }
-    // wait(0);
-
-    // chdir(bb_path_glibc);
-    // int pid = fork();
-    // if (pid == 0) {
-    //     char *argv[] = {"busybox", "sh", "busybox_testcode.sh", 0};
-    //     execve("busybox", bb_testcode, NULL);
-    //     printf("execve busybox cat FAILED\n");
-    //     exit(1);
-    // }
-    // wait(0);
 
     test_pre();
 
