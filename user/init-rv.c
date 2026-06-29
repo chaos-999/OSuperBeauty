@@ -210,10 +210,10 @@ void test_pre() {
     //printf("#### OS COMP TEST GROUP END busybox-glibc ####\n");
 
     // ==========================================
-    // 5. libctest-musl (manual — runtest.exe not available, use entry-static.exe directly)
+    // 5. libctest (manual — runtest.exe not available, use entry-static.exe directly)
     // ==========================================
     chdir(bb_path_musl);
-    printf("#### OS COMP TEST GROUP START libctest-musl ####\n");
+    printf("#### OS COMP TEST GROUP START libctest ####\n");
 
     char *libc_tests[] = {
         "argv", "basename", "clocale_mbfuncs", "clock_gettime",
@@ -260,7 +260,7 @@ void test_pre() {
             execve("entry-static.exe", av, NULL);
             exit(99);
         }
-        printf("========== START %s %s ==========\n", "", libc_tests[i]);
+        printf("========== START %s %s ==========\n", "entry-static.exe", libc_tests[i]);
         int st;
         wait(&st);
         int exit_code = st & 0xff;
@@ -269,15 +269,15 @@ void test_pre() {
         } else {
             printf("FAIL %s [status %d]\n", libc_tests[i], exit_code);
         }
-        printf("========== END %s %s ==========\n", "", libc_tests[i]);
+        printf("========== END %s %s ==========\n", "entry-static.exe", libc_tests[i]);
     }
-    printf("#### OS COMP TEST GROUP END libctest-musl ####\n");
+    printf("#### OS COMP TEST GROUP END libctest ####\n");
 
     // ==========================================
-    // 6. libctest-glibc (manual)
+    // 6. libctest (manual)
     // ==========================================
     chdir(bb_path_glibc);
-    printf("#### OS COMP TEST GROUP START libctest-glibc ####\n");
+    printf("#### OS COMP TEST GROUP START libctest ####\n");
 
     for (int i = 0; libc_tests[i] != NULL; i++) {
         pid = fork();
@@ -290,7 +290,7 @@ void test_pre() {
             execve("entry-static.exe", av, NULL);
             exit(99);
         }
-        printf("========== START %s %s ==========\n", "", libc_tests[i]);
+        printf("========== START %s %s ==========\n", "entry-static.exe", libc_tests[i]);
         int st;
         wait(&st);
         int exit_code = st & 0xff;
@@ -299,9 +299,9 @@ void test_pre() {
         } else {
             printf("FAIL %s [status %d]\n", libc_tests[i], exit_code);
         }
-        printf("========== END %s %s ==========\n", "", libc_tests[i]);
+        printf("========== END %s %s ==========\n", "entry-static.exe", libc_tests[i]);
     }
-    printf("#### OS COMP TEST GROUP END libctest-glibc ####\n");
+    printf("#### OS COMP TEST GROUP END libctest ####\n");
 
     return;
 }

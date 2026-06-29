@@ -115,7 +115,7 @@ void test_pre() {
     // printf("#### OS COMP TEST GROUP END busybox-glibc ####\n");
 
     // ==========================================
-    // 5. libctest-musl
+    // 5. libctest
     // ==========================================
 
     char *libc_tests[] = {
@@ -153,7 +153,7 @@ void test_pre() {
     };
 
     chdir(bb_path_musl);
-    printf("#### OS COMP TEST GROUP START libctest-musl ####\n");
+    printf("#### OS COMP TEST GROUP START libctest ####\n");
     for (int i = 0; libc_tests[i] != NULL; i++) {
         pid = fork();
         if (pid < 0) { printf("libctest: fork failed\n"); continue; }
@@ -162,7 +162,7 @@ void test_pre() {
             execve("entry-static.exe", av, NULL);
             exit(99);
         }
-        printf("========== START %s %s ==========\n", "", libc_tests[i]);
+        printf("========== START %s %s ==========\n", "entry-static.exe", libc_tests[i]);
         int st; wait(&st);
         int exit_code = st & 0xff;
         if (exit_code == 0) {
@@ -170,32 +170,34 @@ void test_pre() {
         } else {
             printf("FAIL %s [status %d]\n", libc_tests[i], exit_code);
         }
-        printf("========== END %s %s ==========\n", "", libc_tests[i]);
+        printf("========== END %s %s ==========\n", "entry-static.exe", libc_tests[i]);
     }
-    printf("#### OS COMP TEST GROUP END libctest-musl ####\n");
+    printf("#### OS COMP TEST GROUP END libctest ####\n");
 
     // ==========================================
-//     // 6. libctest-glibc
-//     // ==========================================
-//     chdir(bb_path_glibc);
-//     printf("#### OS COMP TEST GROUP START libctest-glibc ####\n");
-//     for (int i = 0; libc_tests[i] != NULL; i++) {
-//         pid = fork();
-//         if (pid < 0) { printf("libctest: fork failed\n"); continue; }
-//         if (pid == 0) {
-//             char *av[] = {"entry-static.exe", libc_tests[i], NULL};
-//             execve("entry-static.exe", av, NULL);
-//             exit(99);
-//         }
-//         int st; wait(&st);
-//         int exit_code = st & 0xff;
-//         if (exit_code == 0) {
-//             printf("%s PASS\n", libc_tests[i]);
-//         } else {
-//             printf("%s FAIL [exit %d]\n", libc_tests[i], exit_code);
-//         }
-//     }
-//     printf("#### OS COMP TEST GROUP END libctest-glibc ####\n");
+    // 6. libctest
+    // ==========================================
+    chdir(bb_path_glibc);
+    printf("#### OS COMP TEST GROUP START libctest ####\n");
+    for (int i = 0; libc_tests[i] != NULL; i++) {
+        pid = fork();
+        if (pid < 0) { printf("libctest: fork failed\n"); continue; }
+        if (pid == 0) {
+            char *av[] = {"entry-static.exe", libc_tests[i], NULL};
+            execve("entry-static.exe", av, NULL);
+            exit(99);
+        }
+        printf("========== START %s %s ==========\n", "entry-static.exe", libc_tests[i]);
+        int st; wait(&st);
+        int exit_code = st & 0xff;
+        if (exit_code == 0) {
+            printf("Pass!\n");
+        } else {
+            printf("FAIL %s [status %d]\n", libc_tests[i], exit_code);
+        }
+        printf("========== END %s %s ==========\n", "entry-static.exe", libc_tests[i]);
+    }
+    printf("#### OS COMP TEST GROUP END libctest ####\n");
 
 }
 
