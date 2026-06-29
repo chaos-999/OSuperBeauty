@@ -58,6 +58,7 @@ void test_pre() {
             exit(1);
         }
         if (pid == 0) {
+            printf("Executing basic test: %s\n", basic_name[i]);
             exec(basic_name[i], argv2);
             exit(1);
         }
