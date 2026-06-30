@@ -1,9 +1,25 @@
 # OSuperBeauty
 
+> **初赛答辩 PPT**：[`pre.pptx`](pre.pptx) | **开发总结报告**：[`OSuperBeauty_开发总结报告.md`](OSuperBeauty_开发总结报告.md)
+>
+> PPT 中的评测得分记录来自提交 [`aeda0ff`](https://gitlab.eduxiji.net/T2026900029911083/OSuperBeauty/-/commit/aeda0ff13839b373c58676814855cb21b06f1df1)，后续提交对评测表现有进一步改进。
+
 队伍名称：超级美少女队
 学校名称：中国人民解放军国防科大学
 队伍成员：陈浩男 张朔瑜 张佳安琪
 指导教师：文艳军
+
+## 项目简介
+
+OSuperBeauty 是一个基于 [SpringOS](https://gitlab.eduxiji.net/educg-group-36002-2710490/T202510558995330-264)（2025 优秀参赛作品，中山大学「静春山」队）二次开发的 **RISC-V / LoongArch 双架构操作系统内核**。项目以通过 OS 内核竞赛评测为目标，在 SpringOS 的模块化内核架构之上，系统性地修复了 10+ 项评测阻塞性 bug，扩展系统调用至约 90 个，实现了 musl libc-test 的全量支持（96 PASS），并完成了 ext4 LRU use-after-free 等非确定性内核 bug 的根因定位。
+
+**核心特性**：
+- **双架构支持**：RISC-V 64 位（Sv39 分页）和 LoongArch 64 位，支持 QEMU virt 平台
+- **EXT4 文件系统**：基于 lwext4 库，支持 VFS 抽象层、符号链接、动态链接器加载
+- **Linux ABI 兼容**：约 90 个系统调用，完整 errno 语义，glibc/musl 双 C 库兼容
+- **内存管理**：伙伴分配器、VMA 懒分配、mmap/munmap/mprotect、CoW fork
+- **进程管理**：六状态模型、fork/exec/wait/clone、信号递送、futex 同步
+- **设备驱动**：UART、VirtIO 块设备/网络、PLIC 中断控制器
 
 ## 快速开始
 
