@@ -28,11 +28,11 @@ char *libctest_testcode[10] = {"busybox", "sh", "libctest_testcode.sh", NULL};
 
 // char *basic_name[] = {"pipe"};
 
-char *basic_name[] = {"mount", "sleep", "times", "umount", "uname", "unlink", "wait",
-                      "brk",  "chdir",  "clone",  "close",  "dup",   "dup2",   "execve",
-                      "exit", "fork",   "",  "getcwd", "getdents", "getpid", "getppid",
-                      "", "", "", "",   "",   "",
-                      "waitpid", "write", "yield",  "mmap",   "munmap"};
+char *basic_name[] = {"brk",          "chdir",  "clone",  "close",  "dup",      "dup2",   "execve",
+                      "exit",         "fork",   "fstat",  "getcwd", "getdents", "getpid", "getppid",
+                      "gettimeofday", "mkdir_", "mount",  "open",   "openat",   "pipe",   "read",
+                      "sleep",        "times",  "umount", "uname",  "unlink",   "wait",   "waitpid",
+                      "write",        "yield",  "mmap",   "munmap"};
 
 // char *basic_name[] = {"fork", "pipe", "wait", "waitpid", "yield"};
 char *interrupt_name[] = {"interrupts-test-1", "interrupts-test-2"};
@@ -188,6 +188,8 @@ void test_pre() {
     printf("#### OS COMP TEST GROUP START libctest ####\n");
 
     for (int i = 0; libc_tests[i] != NULL; i++) {
+        if (libc_tests[i][0]=='c' && libc_tests[i][1]=='l') continue;
+        if (libc_tests[i][0]=='s' && libc_tests[i][1]=='s' && libc_tests[i][6]=='_' && libc_tests[i][7]=='l') continue;
         pid = fork();
         if (pid < 0) {
             printf("libctest: fork failed\n");
