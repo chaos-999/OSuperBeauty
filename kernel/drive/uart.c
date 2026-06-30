@@ -122,13 +122,10 @@ void uartputc(int c) {
         for (;;);
     }
     while (uart_tx_w == uart_tx_r + UART_TX_BUF_SIZE) {
-        // buffer is full. Poll LSR to drain a byte if possible
-        if ((ReadReg(LSR) & LSR_TX_IDLE)) {
-            WriteReg(THR, uart_tx_buf[uart_tx_r % UART_TX_BUF_SIZE]);
-            uart_tx_r += 1;
-            continue;
-        }
-        sleep(&uart_tx_r, &uart_tx_lock);
+        // buffer is full. Busy-wait until TX ready, then push a byte
+        while ((ReadReg(LSR) & LSR_TX_IDLE) == 0) ;
+        WriteReg(THR, uart_tx_buf[uart_tx_r % UART_TX_BUF_SIZE]);
+        uart_tx_r += 1;
     }
     uart_tx_buf[uart_tx_w % UART_TX_BUF_SIZE] = c;
     uart_tx_w += 1;
