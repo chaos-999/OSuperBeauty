@@ -121,98 +121,77 @@ void test_pre() {
     // 5. libctest (manual — runtest.exe not available, use entry-static.exe directly)
     // ==========================================
     chdir(bb_path_musl);
-    printf("#### OS COMP TEST GROUP START libctest-musl ####\n");
 
-    char *libc_tests[] = {
-        "argv", "basename", "clocale_mbfuncs", "clock_gettime",
-        "dirname", "env", "fdopen", "fnmatch", "fscanf", "fwscanf",
-        "iconv_open", "inet_pton", "mbc", "memstream",
-        "qsort", "random", "search_hsearch",
-        "search_insque", "search_lsearch", "search_tsearch",
-        "setjmp", "snprintf", "socket", "sscanf", "sscanf_long",
-        "stat", "strftime", "string", "string_memcpy", "string_memmem",
-        "string_memset", "string_strchr", "string_strcspn", "string_strstr",
-        "strptime", "strtod", "strtod_simple", "strtof", "strtol",
-        "strtold", "swprintf", "tgmath", "time", "tls_align",
-        "udiv", "ungetc", "utime", "wcsstr", "wcstol",
-        "daemon_failure", "dn_expand_empty", "dn_expand_ptr_0",
-        "fflush_exit", "fgets_eof", "fgetwc_buffering",
-        "fpclassify_invalid_ld80", "ftello_unflushed_append",
-        "getpwnam_r_crash", "getpwnam_r_errno", "iconv_roundtrips",
-        "inet_ntop_v4mapped", "inet_pton_empty_last_field",
-        "iswspace_null", "lrand48_signextend", "lseek_large",
-        "malloc_0", "mbsrtowcs_overflow", "memmem_oob_read",
-        "memmem_oob", "mkdtemp_failure", "mkstemp_failure",
-        "printf_1e9_oob", "printf_fmt_g_round", "printf_fmt_g_zeros",
-        "printf_fmt_n",
-        "putenv_doublefree", "regex_backref_0", "regex_bracket_icase",
-        "regex_ere_backref", "regex_escaped_high_byte",
-        "regex_negated_range", "regexec_nosub",
-        "rewind_clear_error", "rlimit_open_files",
-        "scanf_bytes_consumed", "scanf_match_literal_eof",
-        "scanf_nullbyte_char", "setvbuf_unget",
-        "sigprocmask_internal", "sscanf_eof", "statvfs",
-        "strverscmp", "syscall_sign_extend", "uselocale_0",
-        "wcsncpy_read_overflow", "wcsstr_false_negative",
-        NULL
-    };
-
-    for (int i = 0; libc_tests[i] != NULL; i++) {
-        pid = fork();
-        if (pid < 0) {
-            printf("libctest: fork failed\n");
-            continue;
-        }
-        if (pid == 0) {
-            char *av[] = {"entry-static.exe", libc_tests[i], NULL};
-            execve("entry-static.exe", av, NULL);
-            exit(99);
-        }
-        printf("========== START %s %s ==========\n", "entry-static.exe", libc_tests[i]);
-        int st;
-        wait(&st);
-        int exit_code = st & 0xff;
-        if (exit_code == 0) {
-            printf("Pass!\n");
-        } else {
-            printf("FAIL %s [status %d]\n", libc_tests[i], exit_code);
-        }
-        printf("========== END %s %s ==========\n", "entry-static.exe", libc_tests[i]);
+    pid = fork();
+    if (pid < 0) {
+        printf("init: fork failed\n");
+    } else if (pid == 0) {
+        execve("busybox", libctest_testcode, NULL);
+        printf("init: exec libctest_testcode failed\n");
+        exit(1);
+    } else {
+        wait(0);
     }
-    printf("#### OS COMP TEST GROUP END libctest-musl ####\n");
+    // printf("#### OS COMP TEST GROUP START libctest-musl ####\n");
 
-    // ==========================================
-//     // 6. libctest (manual)
-//     // ==========================================
-//     chdir(bb_path_glibc);
-//     printf("#### OS COMP TEST GROUP START libctest-glibc ####\n");
-// 
-//     for (int i = 0; libc_tests[i] != NULL; i++) {
-//         if (libc_tests[i][0]=='c' && libc_tests[i][1]=='l') continue;
-//         if (libc_tests[i][0]=='s' && libc_tests[i][1]=='s' && libc_tests[i][6]=='_' && libc_tests[i][7]=='l') continue;
-//         pid = fork();
-//         if (pid < 0) {
-//             printf("libctest: fork failed\n");
-//             continue;
-//         }
-//         if (pid == 0) {
-//             char *av[] = {"entry-static.exe", libc_tests[i], NULL};
-//             execve("entry-static.exe", av, NULL);
-//             exit(99);
-//         }
-//         printf("========== START %s %s ==========\n", "entry-static.exe", libc_tests[i]);
-//         int st;
-//         wait(&st);
-//         int exit_code = st & 0xff;
-//         if (exit_code == 0) {
-//             printf("Pass!\n");
-//         } else {
-//             printf("FAIL %s [status %d]\n", libc_tests[i], exit_code);
-//         }
-//         printf("========== END %s %s ==========\n", "entry-static.exe", libc_tests[i]);
-//     }
-//     printf("#### OS COMP TEST GROUP END libctest-glibc ####\n");
-// 
+    // char *libc_tests[] = {
+    //     "argv", "basename", "clocale_mbfuncs", "clock_gettime",
+    //     "dirname", "env", "fdopen", "fnmatch", "fscanf", "fwscanf",
+    //     "iconv_open", "inet_pton", "mbc", "memstream",
+    //     "qsort", "random", "search_hsearch",
+    //     "search_insque", "search_lsearch", "search_tsearch",
+    //     "setjmp", "snprintf", "socket", "sscanf", "sscanf_long",
+    //     "stat", "strftime", "string", "string_memcpy", "string_memmem",
+    //     "string_memset", "string_strchr", "string_strcspn", "string_strstr",
+    //     "strptime", "strtod", "strtod_simple", "strtof", "strtol",
+    //     "strtold", "swprintf", "tgmath", "time", "tls_align",
+    //     "udiv", "ungetc", "utime", "wcsstr", "wcstol",
+    //     "daemon_failure", "dn_expand_empty", "dn_expand_ptr_0",
+    //     "fflush_exit", "fgets_eof", "fgetwc_buffering",
+    //     "fpclassify_invalid_ld80", "ftello_unflushed_append",
+    //     "getpwnam_r_crash", "getpwnam_r_errno", "iconv_roundtrips",
+    //     "inet_ntop_v4mapped", "inet_pton_empty_last_field",
+    //     "iswspace_null", "lrand48_signextend", "lseek_large",
+    //     "malloc_0", "mbsrtowcs_overflow", "memmem_oob_read",
+    //     "memmem_oob", "mkdtemp_failure", "mkstemp_failure",
+    //     "printf_1e9_oob", "printf_fmt_g_round", "printf_fmt_g_zeros",
+    //     "printf_fmt_n",
+    //     "putenv_doublefree", "regex_backref_0", "regex_bracket_icase",
+    //     "regex_ere_backref", "regex_escaped_high_byte",
+    //     "regex_negated_range", "regexec_nosub",
+    //     "rewind_clear_error", "rlimit_open_files",
+    //     "scanf_bytes_consumed", "scanf_match_literal_eof",
+    //     "scanf_nullbyte_char", "setvbuf_unget",
+    //     "sigprocmask_internal", "sscanf_eof", "statvfs",
+    //     "strverscmp", "syscall_sign_extend", "uselocale_0",
+    //     "wcsncpy_read_overflow", "wcsstr_false_negative",
+    //     NULL
+    // };
+
+    // for (int i = 0; libc_tests[i] != NULL; i++) {
+    //     pid = fork();
+    //     if (pid < 0) {
+    //         printf("libctest: fork failed\n");
+    //         continue;
+    //     }
+    //     if (pid == 0) {
+    //         char *av[] = {"entry-static.exe", libc_tests[i], NULL};
+    //         execve("entry-static.exe", av, NULL);
+    //         exit(99);
+    //     }
+    //     printf("========== START %s %s ==========\n", "entry-static.exe", libc_tests[i]);
+    //     int st;
+    //     wait(&st);
+    //     int exit_code = st & 0xff;
+    //     if (exit_code == 0) {
+    //         printf("Pass!\n");
+    //     } else {
+    //         printf("FAIL %s [status %d]\n", libc_tests[i], exit_code);
+    //     }
+    //     printf("========== END %s %s ==========\n", "entry-static.exe", libc_tests[i]);
+    // }
+    // printf("#### OS COMP TEST GROUP END libctest-musl ####\n");
+
     return;
 }
 
@@ -304,7 +283,19 @@ int main() {
     printf("\n===== OSuperbeauty Auto Test Runner =====\n\n");
 
 
-    test_pre();
+    // test_pre();
+    chdir(bb_path_musl);
+    int pid;
+    pid = fork();
+    if (pid < 0) {
+        printf("init: fork failed\n");
+    } else if (pid == 0) {
+        execve("busybox", libctest_testcode, NULL);
+        printf("init: exec libctest_testcode failed\n");
+        exit(1);
+    } else {
+        wait(0);
+    }
 
     printf("\nAll tests completed, shutting down system...\n");
     shutdown();

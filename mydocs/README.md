@@ -42,3 +42,5 @@
 | `36-rv-bb-testcode-fix.md` | 🔧 RV busybox argv 损坏修复：bb_testcode 全局→局部变量 | 2026-06-28 15:21 |
 | `37-ext4-lru-use-after-free.md` | 🔍 RV ext4 块缓存 LRU 树 Use-After-Free 分析：ext4_journal inc_ref 绕过 LRU 维护 | 2026-06-28 15:21 |
 | `38-la-busybox-musl-silent-exit.md` | 🔍 LA busybox-musl 静默退出诊断：musl pcalau12i 工具链 bug，非内核问题 | 2026-06-28 15:22 |
+| `39-ext4-concurrent-lru-corruption.md` | 🔍 RV ext4 LRU 红黑树崩溃/卡死定位：ext4 挂载锁未安装导致并发重入，修复 fstat/statx 引用泄漏 | 2026-11-11 |
+| `40-runtest-timeout-and-sigkill.md` | 🔍 libc-test runtest.exe 全 FAIL/卡死复盘：sigtimedwait tick 10Hz/100Hz 换算错误 + SIGKILL 未唤醒睡眠进程 | 2026-11-11 |

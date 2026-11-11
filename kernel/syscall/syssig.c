@@ -109,8 +109,17 @@ uint64 sys_rt_sigtimedwait(void) {
         return -EFAULT;
 
     uint64 timeout_ticks = 0;
-    if (ts_ptr != 0)
-        timeout_ticks = (uint64)ts.tv_sec * 10 + (uint64)ts.tv_nsec / 100000000;
+    if (ts_ptr != 0) {
+        /*
+         * trap.c reprograms the timer every 100000 timebase cycles and the
+         * RISC-V timebase runs at 10 MHz, so one tick is 10 ms (100 Hz).
+         * The old code assumed 10 Hz, which made a 5 second timeout expire
+         * after only 0.5 second and killed runtest.exe's child while it was
+         * still loading the test binary.
+         */
+        timeout_ticks = (uint64)ts.tv_sec * 100 +
+                        ((uint64)ts.tv_nsec + 9999999) / 10000000;
+    }
 
     for (;;) {
         // Check for zombie children (bypasses SIGCHLD delivery entirely)

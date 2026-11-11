@@ -258,6 +258,19 @@ int send_signal(int pid, int sig) {
         acquire(&p->lock);
         if (p->state != UNUSED && p->pid == pid) {
             p->sig_pending |= (1ULL << (sig - 1));
+            /*
+             * SIGKILL must also terminate a process that is blocked in a
+             * kernel sleep (futex/sem_wait, pipe, sleep, ...).  Merely
+             * setting sig_pending is not enough: such a process may never
+             * return to user mode to run the default signal action, which
+             * made runtest.exe's kill(SIGKILL) unable to reap a hung
+             * pthread test.
+             */
+            if (sig == SIGKILL) {
+                p->killed = 1;
+                if (p->state == SLEEPING)
+                    p->state = RUNNABLE;
+            }
             release(&p->lock);
             return 0;
         }
