@@ -82,16 +82,265 @@ testcase busybox find -name "busybox_cmd.txt" success
 
 ---
 
-## 3. 为什么之前的判断是误诊
+## 3. 问题发现脉络与误诊复盘
 
-之前把问题归因于“16 块缓存太小 -> shake 频繁 -> LRU 树被 use-after-free”，并建议改成 512。
-这个结论不成立：
+这一节按时间顺序记录“一开始以为什么、后来如何被证据推翻、最后如何定位”。
 
-1. `CONFIG_JOURNALING_ENABLE=0`，journal 回调路径根本不参与，`jbd_trans_end_write`
-   不是嫌疑路径。
-2. 改成 512 后 panic 消失，但测试仍在同一逻辑区域卡死，说明只是改变了时序和症状。
-3. `ext4_buf_lru_RB_REMOVE_COLOR` 的偏移只能证明“树已经坏了”，不能证明“是谁弄坏的”。
-   真正原因在更上层：多个进程同时在操作这棵树。
+### 3.1 起点：沿用根目录 MISDIAGNOSIS-REPORT 和文档 37 的结论
+
+最初的判断来自两份材料：
+
+- 根目录 `MISDIAGNOSIS-REPORT.md`
+- `mydocs/37-ext4-lru-use-after-free.md`
+
+当时的结论是：
+
+1. `CONFIG_BLOCK_DEV_CACHE_SIZE=16` 太小；
+2. `ext4_block_cache_shake()` 频繁淘汰；
+3. `ext4_block_flush_buf()` 里的 journal `end_write` 回调在 shake 期间重入；
+4. 引用计数记账失衡，导致已释放的 `ext4_buf` 仍留在 LRU 树里；
+5. 建议把缓存从 16 改成 512 “止血”。
+
+这个结论看起来很完整，但它是从“崩溃点在 LRU 树”反推出来的，**没有先验证代码路径是否真的存在**。
+
+### 3.2 第一个反证：journal 是关闭的
+
+先检查编译开关：
+
+```bash
+grep -n 'CONFIG_JOURNALING_ENABLE' include/fs/ext4/ext4_config.h
+# #define CONFIG_JOURNALING_ENABLE 0
+```
+
+`CONFIG_JOURNALING_ENABLE=0`，意味着：
+
+- journal 模块不参与；
+- `jbd_trans_end_write()` 这条 `end_write` 回调路径根本不会执行；
+- 把 journal 重入列为首要嫌疑是**事实性错误**。
+
+同时检查：
+
+```bash
+grep -n 'CONFIG_DEBUG_ASSERT\|CONFIG_HAVE_OWN_ASSERT' include/fs/ext4/ext4_config.h
+# 1
+# 1
+```
+
+`ext4_assert()` 是启用的。如果 refcount 断言真的被违反，日志里应该先看到
+`assertion failed`，但实际日志中没有。这进一步削弱了“refcount 记账失衡触发断言”的说法。
+
+### 3.3 第二个反证：调大缓存并没有修复问题
+
+实际把 `CONFIG_BLOCK_DEV_CACHE_SIZE` 从 16 改成 512 后：
+
+- panic 确实消失了；
+- 但测试仍然在 `sort test.txt | ./busybox uniq` 附近卡死；
+- 失败形态在 panic / hang 之间漂移；
+- 失败测试组在 musl / glibc 之间漂移。
+
+这说明“缓存容量”不是根因，只是改变了内存布局和时序。
+如果根因真是“shake 太频繁”，扩大 32 倍缓存应该显著降低失败概率，而不是换一种症状继续 100% 失败。
+
+### 3.4 第三个反证：`stval=0x58/0x70` 只能证明树坏了
+
+旧分析用：
+
+```text
+stval=0x58 = offsetof(ext4_buf, lru_node)
+```
+
+来证明“LRU 树被 shake 破坏”。但结构体偏移只能说明**崩溃时访问的是 LRU 节点**，
+不能说明是谁、在哪一步把树弄坏的。
+
+这次本地复现拿到了新的崩溃点：
+
+```text
+scause=0xd sepc=0x80216796 stval=0x70
+```
+
+反汇编：
+
+```asm
+80216794:   ld a5,96(a1)     # a5 = elm->lru_node.rbe_right
+80216796:   lw a3,112(a5)    # a3 = a5->lru_node.rbe_color
+```
+
+`lru_node.rbe_color` 的偏移正好是 112（0x70），`stval=0x70` 说明 `a5` 是 NULL。
+也就是 `RB_REMOVE_COLOR` 把一个 NULL 兄弟节点当成合法节点解引用了。
+
+这是“树已经损坏”的现场，仍然不是“谁弄坏树”的证明。
+
+### 3.5 转向：为什么同一逻辑点会 panic/hang 漂移？
+
+接下来不再从“缓存大小”入手，而是问：
+
+> 为什么同样的代码、同样的命令，有时 panic，有时卡死，有时甚至跑到更后面？
+
+这种“同点不同形态”更像：
+
+- 内存破坏；
+- 并发竞态；
+- 时序相关 bug。
+
+于是开始检查内核是否真的允许 ext4 并发执行。
+
+### 3.6 关键发现一：内核态可以被 timer 中断抢占
+
+`kernel/trap/rv/trap.c`：
+
+```c
+if (which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)
+    yield();
+```
+
+timer 中断在 `kerneltrap()` 中也会让出 CPU。
+同时 virtio 块 I/O 会 `sleep`，所以进程 A 在 ext4 操作中间被切走、进程 B 继续进入 ext4，
+是完全可发生的。
+
+### 3.7 关键发现二：ext4 挂载锁从未安装
+
+`kernel/fs/lwext4/ext4.c` 中所有公共 API 都写了：
+
+```c
+EXT4_MP_LOCK(mp);
+...
+EXT4_MP_UNLOCK(mp);
+```
+
+但宏的实现是：
+
+```c
+if ((_m)->os_locks)
+    (_m)->os_locks->lock();
+```
+
+而 `ext4_mount_setup_locks()` 只有定义，没有调用者：
+
+```bash
+grep -rn 'ext4_mount_setup_locks' kernel include
+# 只有定义
+```
+
+也就是说：**所有 ext4 公共 API 实际上都是无锁的。**
+
+### 3.8 关键发现三：块缓存 LRU 树本身没有并发保护
+
+`kernel/fs/lwext4/ext4_bcache.c`：
+
+```c
+if (!buf->refctr) {
+    buf->lru_id = ++bc->lru_ctr;
+    RB_REMOVE(ext4_buf_lru, &bc->lru_root, buf);   // 无锁
+    ...
+}
+ext4_bcache_inc_ref(buf);
+```
+
+以及：
+
+```c
+if (!buf->refctr) {
+    RB_INSERT(ext4_buf_lru, &bc->lru_root, buf);   // 无锁
+    ...
+}
+```
+
+典型竞态：
+
+```text
+进程 A: find_get(buf) 看到 refctr == 0
+进程 A: RB_REMOVE(lru, buf)
+        <-- timer 中断，yield
+进程 B: find_get(buf) 仍看到 refctr == 0
+进程 B: 再次 RB_REMOVE(lru, buf)        // 同一节点被删两次
+```
+
+或者两个进程同时 `ext4_bcache_free()`，同时 `RB_INSERT`，旋转/重平衡交错。
+这正好可以解释后续 `RB_REMOVE_COLOR` 的 NULL 兄弟节点，以及树成环后的 hang。
+
+### 3.9 决定性证据：重入检测抓到两个不同进程同时进入 ext4
+
+为了确认“并发重入”不是猜测，在 ext4 公共 API 入口临时加了检测钩子：
+
+```c
+static volatile struct proc *ext4_dbg_owner;
+
+static void ext4_dbg_mp_lock(void)
+{
+    struct proc *me = myproc();
+    if (ext4_dbg_owner)
+        printf("EXT4_MP_REENTRY: dbg_owner=%p now=%p\n",
+               (void *)ext4_dbg_owner, (void *)me);
+    ext4_dbg_owner = me;
+}
+```
+
+实际串口输出：
+
+```text
+EXT4_MP_REENTRY: dbg_owner=0x0000000080288308 now=0x0000000080288e60
+EXT4_MP_REENTRY: dbg_owner=0x0000000080288308 now=0x0000000080286c58
+...
+```
+
+出现位置包括：
+
+- `sh -c 'sleep 5' & ./busybox kill $!`
+- `sort test.txt | ./busybox uniq`
+- `cat test.txt` / `cut -c 3 test.txt` 等管道命令
+
+这些 `struct proc *` 指针不同，说明**父子进程/管道进程确实在同时进入 lwext4**。
+
+### 3.10 额外发现：fstat/statx 绕过锁且泄漏 inode 引用
+
+继续审查所有 ext4 入口时发现：
+
+```c
+int vfs_ext_fstat(struct file *f, struct kstat *st)
+{
+    ...
+    int r = ext4_fs_get_inode_ref(&file->mp->fs, file->inode, &ref);
+    ...
+    return EOK;   // 没有 ext4_fs_put_inode_ref(&ref)
+}
+```
+
+`vfs_ext_statx()` 同样：
+
+- 直接调用低层 `ext4_fs_get_inode_ref()`，不经过 `EXT4_MP_LOCK`；
+- 永不调用 `ext4_fs_put_inode_ref()`，导致 inode table 缓存块引用泄漏。
+
+在 16 块缓存下，这会长期钉住缓存块，压缩可用缓存，使 shake 更频繁，
+进一步放大并发竞态窗口。这也能解释“跳过 basic 测试集时问题有时不出现”：
+basic 测试里的 `fstat` 等调用改变了缓存压力与时序。
+
+### 3.11 最终定位
+
+把所有证据串起来：
+
+1. ext4 挂载锁从未安装，`EXT4_MP_LOCK` 是空操作；
+2. 内核态 timer 中断会 `yield()`，块 I/O 会睡眠；
+3. 多个进程可同时进入 lwext4；
+4. `ext4_bcache_find_get()` / `ext4_bcache_free()` 对 LRU 红黑树的
+   `RB_REMOVE` / `RB_INSERT` 没有并发保护；
+5. LRU 树被双重删除或交错旋转打坏；
+6. 后续 `RB_REMOVE_COLOR` 访问 NULL 兄弟节点 → panic；
+   树成环 → hang；
+7. `CONFIG_BLOCK_DEV_CACHE_SIZE=16` 只是让 shake/LRU 操作更频繁，
+   更容易命中竞态窗口，不是根因。
+
+### 3.12 这一轮排查中的错误清单
+
+| 错误判断 | 为什么错 | 如何被推翻 |
+|----------|----------|------------|
+| 16 块缓存太小导致 LRU 树损坏 | 512 仍然失败，只是症状变成 hang | 512 复跑对照 |
+| journal `end_write` 在 shake 中重入 | `CONFIG_JOURNALING_ENABLE=0` | 查编译开关 |
+| 断言没生效、refcount 错误被静默吞掉 | `CONFIG_DEBUG_ASSERT=1`，日志无 assertion failed | 查配置和日志 |
+| `stval=0x58` 证明 shake 打坏树 | 只证明树已坏，不能证明破坏者 | 新崩溃点 0x70 + 反汇编 |
+| 先考虑优化缓存/淘汰策略 | 真正问题是并发，不是容量 | 重入检测日志 |
+| 以为只是单线程 refcount 记账问题 | 单线程路径无法解释同点 panic/hang 漂移 | 两个不同进程的 `EXT4_MP_REENTRY` |
+
+最终修复见第 7 节。
 
 ---
 
