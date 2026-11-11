@@ -4,6 +4,7 @@
 #include "time.h"
 #include "errno.h"
 #include "fs/fcntl.h"
+#include "lock/lock.h"
 #include "fs/vfs/file.h"
 #include "fs/vfs/fs.h"
 #include "fs/stat.h"
@@ -54,8 +55,29 @@ static inline int k_str_contains(const char *s, const char *pat) {
 
 struct spinlock extlock;
 
+/*
+ * lwext4 is not re-entrant: all of its state (mount points, inode/block
+ * references and the global block cache with its LBA/LRU RB-trees) is shared
+ * by every process.  This kernel is preemptible even while executing kernel
+ * code, and block I/O also sleeps, so a second process can enter ext4 while
+ * the first one is in the middle of a cache operation.  EXT4_MP_LOCK() is a
+ * no-op until os_locks is installed, which used to let that happen and
+ * corrupt the block cache.  Serialize every ext4 entry point with a sleep
+ * lock (it may be held across disk I/O).
+ */
+static struct sleeplock ext4_mount_sleeplock;
+
+static void vfs_ext4_mp_lock(void) { acquiresleep(&ext4_mount_sleeplock); }
+static void vfs_ext4_mp_unlock(void) { releasesleep(&ext4_mount_sleeplock); }
+
+static const struct ext4_lock vfs_ext4_mp_locks = {
+    .lock = vfs_ext4_mp_lock,
+    .unlock = vfs_ext4_mp_unlock,
+};
+
 int vfs_ext4_init(void) {
     initlock(&extlock, "ext4 fs");
+    initsleeplock(&ext4_mount_sleeplock, "ext4 mount");
     ext4_device_unregister_all();
     ext4_init_mountpoints();
     return 0;
@@ -76,6 +98,13 @@ int vfs_ext_mount(struct filesystem *fs, uint64_t rwflag, void *data) {
         vfs_ext4_blockdev_destroy(vbdev);
         goto out;
     } else {
+        r = ext4_mount_setup_locks(fs->path, &vfs_ext4_mp_locks);
+        if (r != EOK) {
+            printf("ext4_mount_setup_locks failed: %d\n", r);
+            ext4_umount(fs->path);
+            vfs_ext4_blockdev_destroy(vbdev);
+            goto out;
+        }
         ext4_get_sblock(fs->path, (struct ext4_sblock **)(&(fs->fs_data)));
     }
 out:
@@ -121,7 +150,9 @@ int vfs_ext_umount(struct filesystem *fs) {
         return r;
     }
 
-    ext4_umount(fs->path);
+    acquiresleep(&ext4_mount_sleeplock);
+    r = ext4_umount(fs->path);
+    releasesleep(&ext4_mount_sleeplock);
     if (r != EOK) {
         return r;
     }
@@ -684,8 +715,11 @@ int vfs_ext_fstat(struct file *f, struct kstat *st) {
     if (file == NULL) {
         return -EBADF;  // 非 ext4 文件或无底层结构
     }
+
+    acquiresleep(&ext4_mount_sleeplock);
     int r = ext4_fs_get_inode_ref(&file->mp->fs, file->inode, &ref);
     if (r != EOK) {
+        releasesleep(&ext4_mount_sleeplock);
         return -r;
     }
 
@@ -694,7 +728,8 @@ int vfs_ext_fstat(struct file *f, struct kstat *st) {
     st->st_ino = ref.index;
     // Derive mode from inode metadata
     struct ext4_sblock *sb = NULL;
-    if (ext4_get_sblock(f->f_path, &sb) == EOK && sb) {
+    bool sb_ok = (ext4_get_sblock(f->f_path, &sb) == EOK && sb);
+    if (sb_ok) {
         st->st_mode = ext4_inode_get_mode(sb, ref.inode);
     } else {
         // Fallback: treat as regular file with default perms
@@ -705,9 +740,9 @@ int vfs_ext_fstat(struct file *f, struct kstat *st) {
     st->st_gid = 0;
     st->st_rdev = 0;
     // Use helper to get correct size with proper endianness
-    st->st_size = ext4_inode_get_size(sb, ref.inode);
+    st->st_size = sb_ok ? ext4_inode_get_size(sb, ref.inode) : 0;
     // Report reasonable block size and blocks (512-byte units per POSIX)
-    if (sb) {
+    if (sb_ok) {
         st->st_blksize = ext4_sb_get_block_size(sb);
     } else {
         st->st_blksize = 4096;
@@ -717,6 +752,12 @@ int vfs_ext_fstat(struct file *f, struct kstat *st) {
     st->st_atime_sec = ext4_inode_get_access_time(ref.inode);
     st->st_ctime_sec = ext4_inode_get_change_inode_time(ref.inode);
     st->st_mtime_sec = ext4_inode_get_modif_time(ref.inode);
+
+    // Release the inode-table block reference; it was leaked before.
+    r = ext4_fs_put_inode_ref(&ref);
+    releasesleep(&ext4_mount_sleeplock);
+    if (r != EOK)
+        return -r;
 
     // printf("DEBUG vfs_ext_fstat: path=%s, size_lo=%u, blocks=%u, blksize=%u, st_size=%lu,
     // st_blocks=%lu\n",
@@ -732,12 +773,15 @@ int vfs_ext_statx(struct file *f, struct statx *st) {
     if (file == NULL) {
         return -EBADF;  // 非 ext4 文件或无底层结构
     }
+
+    acquiresleep(&ext4_mount_sleeplock);
     int r = ext4_fs_get_inode_ref(&file->mp->fs, file->inode, &ref);
     if (r != EOK) {
         if (strcmp(myproc()->name, "git") == 0) {
             // printf("DEBUG: vfs_ext_statx ext4_fs_get_inode_ref failed path='%s' rc=%d\n",
             // f->f_path, r);
         }
+        releasesleep(&ext4_mount_sleeplock);
         return -r;
     }
 
@@ -766,6 +810,12 @@ int vfs_ext_statx(struct file *f, struct statx *st) {
         // printf("DEBUG: vfs_ext_statx ok path='%s' mode=0%o size=%lu blksize=%u blocks=%lu\n",
         // f->f_path, st->stx_mode, st->stx_size, st->stx_blksize, st->stx_blocks);
     }
+
+    // Release the inode-table block reference; it was leaked before.
+    r = ext4_fs_put_inode_ref(&ref);
+    releasesleep(&ext4_mount_sleeplock);
+    if (r != EOK)
+        return -r;
 
     return EOK;
 }
