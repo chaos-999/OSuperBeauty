@@ -37,6 +37,121 @@ int flags2perm(int flags) {
 static int loadseg(pde_t *, uint64, struct inode *, uint, uint);
 
 #ifdef RISCV
+/*
+ * 动态链接二进制在 ELF 的 PT_INTERP 中给出解释器路径，例如：
+ *   /lib/ld-musl-riscv64-sf.so.1
+ *   /lib/ld-musl-riscv64.so.1
+ *   /lib/ld-linux-riscv64-lp64d.so.1
+ *
+ * 测试镜像并没有 /lib 目录：musl 的 libc.so 在 /musl/lib/libc.so，
+ * glibc 的解释器在 /glibc/lib/ld-linux-riscv64-lp64d.so.1。
+ * 所以先按原路径找，再尝试镜像里的实际位置。
+ */
+static struct inode *exec_open_interp(const char *path) {
+    struct inode *ip = namei((char *)path);
+    if (ip)
+        return ip;
+
+    const char *base = path;
+    for (const char *p = path; *p; p++)
+        if (*p == '/')
+            base = p + 1;
+
+    char alt[MAXPATH];
+    const char *dirs[] = {"/musl/lib/", "/glibc/lib/"};
+    for (int d = 0; d < (int)(sizeof(dirs) / sizeof(dirs[0])); d++) {
+        int n = strlen(dirs[d]);
+        safestrcpy(alt, dirs[d], MAXPATH);
+        safestrcpy(alt + n, base, MAXPATH - n);
+        ip = namei(alt);
+        if (ip)
+            return ip;
+    }
+
+    /* musl 的 libc.so 同时就是动态链接器本身。 */
+    if (strncmp(base, "ld-musl-riscv64", 15) == 0)
+        return namei("/musl/lib/libc.so");
+
+    return 0;
+}
+
+static int exec_load_interp(pagetable_t pagetable, struct inode *ip,
+                            uint64 base, uint64 *entry_out) {
+    struct elfhdr lelf;
+    struct proghdr ph;
+    uint64 off;
+    int i;
+
+    if (ip->i_op->read(ip, 0, (uint64)&lelf, 0, sizeof(lelf)) != sizeof(lelf))
+        return -1;
+    if (lelf.magic != ELF_MAGIC)
+        return -1;
+
+    for (i = 0, off = lelf.phoff; i < lelf.phnum; i++, off += sizeof(ph)) {
+        if (ip->i_op->read(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph))
+            return -1;
+        if (ph.type != ELF_PROG_LOAD)
+            continue;
+        if (ph.memsz < ph.filesz)
+            return -1;
+        if (ph.vaddr + ph.memsz < ph.vaddr)
+            return -1;
+
+        uint64 va = base + ph.vaddr;
+        uint64 vend = va + ph.memsz;
+        if (va < base || vend < va)
+            return -1;
+
+        /* 解释器不进入 p->sz，单独映射到 base 以上的固定区域。 */
+        for (uint64 pg = PGROUNDDOWN(va); pg < PGROUNDUP(vend); pg += PGSIZE) {
+            char *mem = kalloc();
+            if (mem == 0)
+                return -1;
+            memset(mem, 0, PGSIZE);
+            if (mappages(pagetable, pg, PGSIZE, (uint64)mem,
+                         PTE_W | PTE_X | PTE_R | PTE_U) < 0) {
+                kfree(mem);
+                return -1;
+            }
+        }
+
+        /* 拷贝文件内容。va 可能不是页对齐的。 */
+        uint64 fend = va + ph.filesz;
+        for (uint64 pg = PGROUNDDOWN(va); pg < PGROUNDUP(fend); pg += PGSIZE) {
+            uint64 pa = walkaddr(pagetable, pg);
+            if (pa == 0)
+                return -1;
+
+            uint64 skip = (pg < va) ? (va - pg) : 0;
+            uint64 foff = ph.off + (pg + skip - va);
+            uint64 n = PGSIZE - skip;
+            if (pg + skip + n > fend)
+                n = fend - (pg + skip);
+
+            if (n != 0 && ip->i_op->read(ip, 0, pa + skip, foff, n) != (int)n)
+                return -1;
+        }
+
+        /* 清零 BSS。 */
+        if (ph.memsz > ph.filesz) {
+            uint64 bss = va + ph.filesz;
+            for (uint64 pg = PGROUNDDOWN(bss); pg < vend; pg += PGSIZE) {
+                uint64 pa = walkaddr(pagetable, pg);
+                if (pa == 0)
+                    continue;
+                uint64 skip = (pg < bss) ? (bss - pg) : 0;
+                uint64 len = PGSIZE - skip;
+                if (pg + len > vend)
+                    len = vend - pg;
+                memset((void *)(pa + skip), 0, len);
+            }
+        }
+    }
+
+    *entry_out = base + lelf.entry;
+    return 0;
+}
+
 int execve(char *path, char **argv, char **envp) {
     char *s, *last;
     int i, off, ret = -1;
@@ -44,6 +159,10 @@ int execve(char *path, char **argv, char **envp) {
     struct elfhdr elf;
     struct inode *ip;
     struct proghdr ph;
+    char interp_buf[MAXPATH] = {0};
+    uint64 interp_off = 0, interp_len = 0;
+    uint64 interp_base = 0, interp_entry = 0;
+    int has_interp = 0;
     pagetable_t pagetable = 0, oldpagetable;
     struct proc *p = myproc();
     int has_setuid = 0, has_setgid = 0;
@@ -84,6 +203,13 @@ int execve(char *path, char **argv, char **envp) {
     uint64 first_load_vaddr = 0;
     for (i = 0, off = elf.phoff; i < elf.phnum; i++, off += sizeof(ph)) {
         if (ip->i_op->read(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph)) goto bad;
+        if (ph.type == ELF_PROG_INTERP) {
+            if (ph.filesz < MAXPATH) {
+                interp_off = ph.off;
+                interp_len = ph.filesz;
+            }
+            continue;
+        }
         if (ph.type != ELF_PROG_LOAD) continue;
         if (first_load_vaddr == 0 || ph.vaddr < first_load_vaddr) first_load_vaddr = ph.vaddr;
         if (ph.memsz < ph.filesz) goto bad;
@@ -106,8 +232,34 @@ int execve(char *path, char **argv, char **envp) {
             goto bad;
         }
     }
+
+    /* 读取 PT_INTERP 指定的动态链接器路径。 */
+    if (interp_len > 0) {
+        if (ip->i_op->read(ip, 0, (uint64)interp_buf, interp_off, interp_len) !=
+            (int)interp_len)
+            goto bad;
+        interp_buf[interp_len] = '\0';
+    }
+
     ip->i_op->unlock(ip);
     ip = 0;
+
+    /* 动态链接：加载解释器，并把入口切到解释器。 */
+    if (interp_len > 0) {
+        struct inode *lip = exec_open_interp(interp_buf);
+        if (lip == 0) {
+            printf("execve: interpreter not found: %s\n", interp_buf);
+            goto bad;
+        }
+        lip->i_op->lock(lip);
+        interp_base = 0x40000000;
+        if (exec_load_interp(pagetable, lip, interp_base, &interp_entry) < 0) {
+            lip->i_op->unlock(lip);
+            goto bad;
+        }
+        lip->i_op->unlock(lip);
+        has_interp = 1;
+    }
 
     p = myproc();
     uint64 oldsz = p->sz;
@@ -160,7 +312,7 @@ int execve(char *path, char **argv, char **envp) {
     AUXV(AT_PHDR, first_load_vaddr + elf.phoff);
     AUXV(AT_PHENT, elf.phentsize);
     AUXV(AT_PHNUM, elf.phnum);
-    AUXV(AT_BASE, 0);
+    AUXV(AT_BASE, has_interp ? interp_base : 0);
     AUXV(AT_ENTRY, elf.entry);
     AUXV(AT_UID, p->uid);
     AUXV(AT_EUID, has_setuid ? file_uid : p->euid);
@@ -225,7 +377,7 @@ int execve(char *path, char **argv, char **envp) {
     oldpagetable = p->pagetable;
     p->pagetable = pagetable;
     p->sz = sz;                     // Process size only includes program segments, not stack
-    p->trapframe->epc = elf.entry;  // initial program counter = main
+    p->trapframe->epc = has_interp ? interp_entry : elf.entry;  // dynamic ELF starts in interpreter
     p->trapframe->sp = sp;          // initial stack pointer
     safestrcpy(p->exec_path, path, MAXPATH);  // for /proc/self/exe
 

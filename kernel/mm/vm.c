@@ -331,13 +331,18 @@ void uvmfirst(pagetable_t pagetable, uchar *src, uint sz) {
     mappages(pagetable, 2 * PGSIZE, PGSIZE, (uint64)mem, PTE_W | PTE_R | PTE_X | PTE_U);
     if (sz > 2 * PGSIZE) {
         memmove(mem, (uchar *)((uint64)src + 2 * PGSIZE), MIN(sz - 2 * PGSIZE, PGSIZE));
+    }
 
+    /*
+     * The initial user stack top is 4 * PGSIZE, so page 3 is always used as
+     * stack even when initcode itself is smaller than 8 KiB.  Map it
+     * unconditionally; otherwise the first push at sp-8 faults.
+     */
     mem = kalloc();
     memset(mem, 0, PGSIZE);
     mappages(pagetable, 3 * PGSIZE, PGSIZE, (uint64)mem, PTE_W | PTE_R | PTE_X | PTE_U);
     if (sz > 3 * PGSIZE) {
         memmove(mem, (uchar *)((uint64)src + 3 * PGSIZE), MIN(sz - 3 * PGSIZE, PGSIZE));
-    }
     }
 #elif defined(LOONGARCH)
     char *mem;

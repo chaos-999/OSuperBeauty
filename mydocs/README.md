@@ -44,6 +44,8 @@
 | `38-la-busybox-musl-silent-exit.md` | 🔍 LA busybox-musl 静默退出诊断：musl pcalau12i 工具链 bug，非内核问题 | 2026-06-28 15:22 |
 | `39-ext4-concurrent-lru-corruption.md` | 🔍 RV ext4 LRU 红黑树崩溃/卡死定位：ext4 挂载锁未安装导致并发重入，修复 fstat/statx 引用泄漏 | 2026-11-11 |
 | `40-runtest-timeout-and-sigkill.md` | 🔍 libc-test runtest.exe 全 FAIL/卡死复盘：sigtimedwait tick 10Hz/100Hz 换算错误 + SIGKILL 未唤醒睡眠进程 | 2026-11-11 |
+| `41-rv-dynamic-linker-pt-interp.md` | 🔧 RV 动态链接缺失支持修复：解析 PT_INTERP、加载解释器到 0x40000000、设置 AT_BASE/AT_ENTRY、兼容 /musl/lib 与 /glibc/lib 路径 | 2026-11-12 |
+| `42-elf-dynamic-linker-primer.md` | 📚 ELF 与动态链接零基础入门：ELF header/program header/PT_LOAD/PT_INTERP、静态 vs 动态链接、GOT/PLT/RELA、AT_PHDR/AT_ENTRY/AT_BASE，并逐项对应 41 的实现 | 2026-11-12 |
 
 ## 勘误与错误方向标记
 

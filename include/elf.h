@@ -35,6 +35,7 @@ struct proghdr {
 
 // Values for Proghdr type
 #define ELF_PROG_LOAD 1
+#define ELF_PROG_INTERP 3
 
 // Flag bits for Proghdr flags
 #define ELF_PROG_FLAG_EXEC 1
