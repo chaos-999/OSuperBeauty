@@ -36,6 +36,25 @@ int flags2perm(int flags) {
 
 static int loadseg(pde_t *, uint64, struct inode *, uint, uint);
 
+/*
+ * Record the real executable path for /proc/self/exe.
+ *
+ * Do not store the literal "/proc/self/exe": doing so makes the next
+ * /proc/self/exe lookup resolve to itself and fail.  Also store an absolute
+ * path so a later chdir() does not change what /proc/self/exe refers to.
+ */
+static void set_exec_path(const char *path) {
+    struct proc *p = myproc();
+    char absolute[MAXPATH];
+
+    if (strncmp(path, "/proc/self/exe", 14) == 0
+        && (path[14] == '\0' || path[14] == '/'))
+        return;
+
+    get_absolute_path(path, p->cwd.path, absolute);
+    safestrcpy(p->exec_path, absolute, MAXPATH);
+}
+
 #ifdef RISCV
 /*
  * 动态链接二进制在 ELF 的 PT_INTERP 中给出解释器路径，例如：
@@ -379,7 +398,7 @@ int execve(char *path, char **argv, char **envp) {
     p->sz = sz;                     // Process size only includes program segments, not stack
     p->trapframe->epc = has_interp ? interp_entry : elf.entry;  // dynamic ELF starts in interpreter
     p->trapframe->sp = sp;          // initial stack pointer
-    safestrcpy(p->exec_path, path, MAXPATH);  // for /proc/self/exe
+    set_exec_path(path);  // for /proc/self/exe
 
     release(&p->lock);
 
@@ -451,8 +470,8 @@ int execve(char *path, char **argv, char **envp) {
     uint file_uid = 0, file_gid = 0;
 
     if ((ip = namei(path)) == 0) {
-        printf("namei failed\n");
-        return -1;
+        printf("execve: namei failed: %s\n", path);
+        return -ENOENT;
     }
     ip->i_op->lock(ip);
 
@@ -635,6 +654,8 @@ int execve(char *path, char **argv, char **envp) {
     p->trapframe->a0 = argc;
     p->trapframe->a1 = argv_ptr;
     p->trapframe->a2 = envp_ptr;
+
+    set_exec_path(path);
 
     release(&p->lock);
 

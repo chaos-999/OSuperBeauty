@@ -283,34 +283,21 @@ int main() {
     printf("\n===== OSuperbeauty Auto Test Runner =====\n\n");
 
 
-    // test_pre();
+    test_pre();
 
     // chdir(bb_path_musl);
     // int pid;
     // pid = fork();
+    // char * ls_argv[] = {"busybox", "sh", "libctest_testcode.sh", NULL};
     // if (pid < 0) {
     //     printf("init: fork failed\n");
     // } else if (pid == 0) {
-    //     execve("busybox", libctest_testcode, NULL);
+    //     execve("busybox", ls_argv, NULL);
     //     printf("init: exec libctest_testcode failed\n");
     //     exit(1);
     // } else {
     //     wait(0);
     // }
-
-    chdir(bb_path_musl);
-    int pid;
-    pid = fork();
-    char * ls_argv[] = {"busybox", "sh", "run-dynamic.sh", NULL};
-    if (pid < 0) {
-        printf("init: fork failed\n");
-    } else if (pid == 0) {
-        execve("busybox", ls_argv, NULL);
-        printf("init: exec libctest_testcode failed\n");
-        exit(1);
-    } else {
-        wait(0);
-    }
 
     printf("\nAll tests completed, shutting down system...\n");
     shutdown();

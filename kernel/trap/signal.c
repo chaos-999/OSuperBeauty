@@ -2,6 +2,7 @@
 #include "signal.h"
 #include "memlayout.h"
 #include "defs.h"
+#include "errno.h"
 
 extern char sig_trampoline[];
 // #ifdef RISCV
@@ -249,7 +250,7 @@ void sig_restore_context(void) {
 // 发送信号到进程
 int send_signal(int pid, int sig) {
     if (!sig_valid(sig)) {
-        return -1;
+        return -EINVAL;
     }
 
     struct proc *p;
@@ -277,7 +278,7 @@ int send_signal(int pid, int sig) {
         release(&p->lock);
     }
 
-    return -1;
+    return -ESRCH;
 }
 
 // 发送信号到线程

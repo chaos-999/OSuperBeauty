@@ -620,6 +620,21 @@ void exit(int status) {
     // 主线程（或单线程进程）：tid == tgid，清理全部进程资源
     int is_thread = (p->tid != p->tgid);
 
+    // 清除 clear_child_tid 并 futex_wake（通知 pthread_join 等待者）
+    /*
+     * 先清理 clear_child_tid，再释放 VMA。
+     * glibc/musl 的 set_tid_address() 指针通常位于 TLS/TCB 或 mmap 区域，
+     * 如果先 vmaunmap()，后面 copyout 就会 EFAULT。
+     */
+    if (p->clear_child_tid) {
+        int clear = 0;
+        copyout(p->pagetable, p->clear_child_tid, (char *)&clear, sizeof(clear));
+        // 唤醒等在 ctid 上的 futex 等待者（pthread_join 用）
+        extern uint64 futex_wake(uint64 uaddr, int nr_wake);
+        futex_wake(p->clear_child_tid, 1);
+        p->clear_child_tid = 0;
+    }
+
     if (!is_thread) {
         // === 主线程/进程退出：清理全部资源 ===
 
@@ -670,15 +685,6 @@ void exit(int status) {
 
     acquire(&p->lock);
 
-    // 清除 clear_child_tid 并 futex_wake（通知 pthread_join 等待者）
-    if (p->clear_child_tid) {
-        int clear = 0;
-        copyout(p->pagetable, p->clear_child_tid, (char *)&clear, sizeof(clear));
-        // 唤醒等在 ctid 上的 futex 等待者（pthread_join 用）
-        extern uint64 futex_wake(uint64 uaddr, int nr_wake);
-        futex_wake(p->clear_child_tid, 1);
-        p->clear_child_tid = 0;
-    }
 
     p->xstate = status;
     p->state = ZOMBIE;
@@ -1068,7 +1074,7 @@ int kill(int pid) {
         }
         release(&p->lock);
     }
-    return -1;
+    return -ESRCH;
 }
 
 void setkilled(struct proc *p) {

@@ -46,6 +46,8 @@
 | `40-runtest-timeout-and-sigkill.md` | 🔍 libc-test runtest.exe 全 FAIL/卡死复盘：sigtimedwait tick 10Hz/100Hz 换算错误 + SIGKILL 未唤醒睡眠进程 | 2026-11-11 |
 | `41-rv-dynamic-linker-pt-interp.md` | 🔧 RV 动态链接缺失支持修复：解析 PT_INTERP、加载解释器到 0x40000000、设置 AT_BASE/AT_ENTRY、兼容 /musl/lib 与 /glibc/lib 路径 | 2026-11-12 |
 | `42-elf-dynamic-linker-primer.md` | 📚 ELF 与动态链接零基础入门：ELF header/program header/PT_LOAD/PT_INTERP、静态 vs 动态链接、GOT/PLT/RELA、AT_PHDR/AT_ENTRY/AT_BASE，并逐项对应 41 的实现 | 2026-11-12 |
+| `43-clear-child-tid-copyout-order.md` | 🔍 basic 全通过但反复 copyout failed 诊断：普通进程 exit() 先 vmaunmap 再清零 clear_child_tid，导致 TLS/TCB 页已不存在；线程退出路径不受影响 | 2026-11-15 |
+| `44-namei-proc-self-exe-and-la-execve-fix.md` | 🔧 `/proc/self/exe` 的 namei 长度判断 off-by-one 修正 + LA execve 返回 -ENOENT、维护 exec_path、kill/send_signal 返回 -ESRCH | 2026-11-15 |
 
 ## 勘误与错误方向标记
 

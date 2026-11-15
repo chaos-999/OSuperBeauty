@@ -184,8 +184,8 @@ struct inode *namei(char *path) {
     char name[EXT4_PATH_LONG_MAX];
 
     // /proc/self/exe: return the current process's executable
-    if (strncmp(path, "/proc/self/exe", 15) == 0
-        && (path[15] == '\0' || path[15] == '/')) {
+    if (strncmp(path, "/proc/self/exe", 14) == 0
+        && (path[14] == '\0' || path[14] == '/')) {
         struct proc *p = myproc();
         if (p->exec_path[0] != '\0') {
             get_absolute_path(p->exec_path, p->cwd.path, name);
