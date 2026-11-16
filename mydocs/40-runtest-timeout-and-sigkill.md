@@ -477,3 +477,49 @@ grep -n 'sig == SIGKILL' -A5 kernel/trap/signal.c
 
 修复这两点后，libc-test static 的 `runtest.exe` 链路可以正常跑完，
 `[status 255]` 全灭和 pthread 永久卡死都消失。
+
+---
+
+## 8. LA 补充：tick 频率不是 100 Hz
+
+上面的 `* 100` 修复只对 RV 成立。LA 的定时器配置是：
+
+```c
+// kernel/trap/la/trap.c
+uint64 tcfg = 0x1000000UL | CSR_TCFG_EN | CSR_TCFG_PER;
+```
+
+QEMU LoongArch stable timer 为 100 MHz，所以：
+
+```text
+0x1000000 / 100MHz = 0.1678s ≈ 5.96 Hz
+```
+
+`sigtimedwait` 仍按 100 Hz 换算时，5 秒超时会变成约 **84 秒**，日志表现为
+停在 `START entry-static.exe pthread_cond` 后长时间没有 `FAIL/END`。
+
+修复方式：把时间换算收敛到 `include/time.h:timespec_to_ticks()`：
+
+```c
+#ifdef RISCV
+#define TIMEBASE_FREQ 10000000ULL
+#define TIMER_TICK_CYCLES 100000ULL
+#elif defined(LOONGARCH)
+#define TIMEBASE_FREQ 100000000ULL
+#define TIMER_TICK_CYCLES 0x1000000ULL
+#endif
+```
+
+该函数按平台时基计算 tick，`sys_rt_sigtimedwait()`、`ppoll_calc()`、
+`sys_nanosleep()` 统一调用它，不再写死 `* 100` / `* 10`。
+
+验证：修复后 LA 的 pthread 测试会在约 5 秒后正常：
+
+```text
+FAIL pthread_cond [...]
+========== END entry-static.exe pthread_cond ==========
+========== START entry-static.exe pthread_tsd ==========
+```
+
+> 后续上真实硬件时，应把 `TIMEBASE_FREQ` 做成板级配置或从 CPUCFG/设备树读取；
+> 同时 `FREQUENCY`（`rdtime` 换算）也需要按架构拆分，当前仍是 RV 的 10 MHz。

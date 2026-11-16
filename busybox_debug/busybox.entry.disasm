@@ -1,0 +1,135 @@
+
+busybox：     文件格式 elf64-loongarch
+
+
+Disassembly of section .text:
+
+00000001201b630c <.text+0x1b61ec>:
+   1201b630c:	b           	-480	# 0x1201b612c
+   1201b6310:	move        	$t0, $zero
+   1201b6314:	b           	-168	# 0x1201b626c
+   1201b6318:	beqz        	$a1, -844	# 0x1201b5fcc
+   1201b631c:	b           	-144	# 0x1201b628c
+   1201b6320:	bnez        	$t6, 92	# 0x1201b637c
+   1201b6324:	bstrpick.d  	$t1, $t1, 0x36, 0x3
+   1201b6328:	andi        	$t0, $t0, 0x7ff
+   1201b632c:	lu12i.w     	$t2, 4112
+   1201b6330:	b           	-856	# 0x1201b5fd8
+   1201b6334:	li.w        	$t2, 1
+   1201b6338:	li.w        	$t1, 1
+   1201b633c:	li.w        	$t0, 2
+   1201b6340:	bnez        	$a1, 28	# 0x1201b635c
+   1201b6344:	move        	$t0, $zero
+   1201b6348:	li.w        	$t6, 1
+   1201b634c:	bnez        	$t2, -792	# 0x1201b6034
+   1201b6350:	move        	$t0, $zero
+   1201b6354:	lu12i.w     	$t5, 16
+   1201b6358:	b           	-236	# 0x1201b626c
+   1201b635c:	addi.d      	$t6, $t0, 8
+   1201b6360:	srli.d      	$t6, $t6, 0x38
+   1201b6364:	xori        	$t6, $t6, 0x1
+   1201b6368:	andi        	$t6, $t6, 0x1
+   1201b636c:	beqz        	$t2, 24	# 0x1201b6384
+   1201b6370:	move        	$t0, $zero
+   1201b6374:	b           	-832	# 0x1201b6034
+   1201b6378:	move        	$t0, $zero
+   1201b637c:	lu12i.w     	$t2, 48
+   1201b6380:	b           	-400	# 0x1201b61f0
+   1201b6384:	lu12i.w     	$t4, 16
+   1201b6388:	move        	$t0, $zero
+   1201b638c:	bnez        	$t6, -60	# 0x1201b6350
+   1201b6390:	slli.w      	$t2, $t4, 0x8
+   1201b6394:	add.w       	$t2, $t2, $t4
+   1201b6398:	bstrpick.d  	$t1, $t1, 0x36, 0x3
+   1201b639c:	andi        	$t0, $t0, 0x7ff
+   1201b63a0:	bstrpick.d  	$t2, $t2, 0x1f, 0x0
+   1201b63a4:	b           	-972	# 0x1201b5fd8
+   1201b63a8:	andi        	$t6, $t4, 0x300
+   1201b63ac:	li.w        	$t7, 512
+   1201b63b0:	andi        	$t5, $t4, 0x300
+   1201b63b4:	beq         	$t6, $t7, -212	# 0x1201b62e0
+   1201b63b8:	li.w        	$t7, 768
+   1201b63bc:	beq         	$t6, $t7, -124	# 0x1201b6340
+   1201b63c0:	bnez        	$t6, -220	# 0x1201b62e4
+   1201b63c4:	andi        	$t4, $t0, 0xf
+   1201b63c8:	li.w        	$t6, 4
+   1201b63cc:	bne         	$t4, $t6, 44	# 0x1201b63f8
+   1201b63d0:	beqz        	$t2, -128	# 0x1201b6350
+   1201b63d4:	andi        	$t0, $t1, 0xf
+   1201b63d8:	beq         	$t0, $t4, -96	# 0x1201b6378
+   1201b63dc:	addi.d      	$t1, $t1, 4
+   1201b63e0:	bstrpick.d  	$t4, $t1, 0x37, 0x37
+   1201b63e4:	lu12i.w     	$t2, 48
+   1201b63e8:	li.w        	$t0, 1
+   1201b63ec:	bnez        	$t4, -884	# 0x1201b6078
+   1201b63f0:	move        	$t0, $zero
+   1201b63f4:	b           	-516	# 0x1201b61f0
+   1201b63f8:	addi.d      	$t6, $t0, 4
+   1201b63fc:	srli.d      	$t6, $t6, 0x38
+   1201b6400:	xori        	$t6, $t6, 0x1
+   1201b6404:	andi        	$t6, $t6, 0x1
+   1201b6408:	b           	-156	# 0x1201b636c
+   1201b640c:	move        	$fp, $zero
+   1201b6410:	move        	$a0, $sp
+   1201b6414:	pcalau12i   	$a1, -131510
+   1201b6418:	addi.d      	$a1, $a1, 0
+   1201b641c:	bstrins.d   	$sp, $zero, 0x3, 0x0
+   1201b6420:	b           	-1794780	# 0x120000144
+   1201b6424:	ld.d        	$ra, $a0, 0
+   1201b6428:	ld.d        	$sp, $a0, 8
+   1201b642c:	ld.d        	$r21, $a0, 16
+   1201b6430:	ld.d        	$fp, $a0, 24
+   1201b6434:	ld.d        	$s0, $a0, 32
+   1201b6438:	ld.d        	$s1, $a0, 40
+   1201b643c:	ld.d        	$s2, $a0, 48
+   1201b6440:	ld.d        	$s3, $a0, 56
+   1201b6444:	ld.d        	$s4, $a0, 64
+   1201b6448:	ld.d        	$s5, $a0, 72
+   1201b644c:	ld.d        	$s6, $a0, 80
+   1201b6450:	ld.d        	$s7, $a0, 88
+   1201b6454:	ld.d        	$s8, $a0, 96
+   1201b6458:	fld.d       	$fs0, $a0, 104
+   1201b645c:	fld.d       	$fs1, $a0, 112
+   1201b6460:	fld.d       	$fs2, $a0, 120
+   1201b6464:	fld.d       	$fs3, $a0, 128
+   1201b6468:	fld.d       	$fs4, $a0, 136
+   1201b646c:	fld.d       	$fs5, $a0, 144
+   1201b6470:	fld.d       	$fs6, $a0, 152
+   1201b6474:	fld.d       	$fs7, $a0, 160
+   1201b6478:	sltui       	$a0, $a1, 1
+   1201b647c:	add.d       	$a0, $a0, $a1
+   1201b6480:	ret
+   1201b6484:	st.d        	$ra, $a0, 0
+   1201b6488:	st.d        	$sp, $a0, 8
+   1201b648c:	st.d        	$r21, $a0, 16
+   1201b6490:	st.d        	$fp, $a0, 24
+   1201b6494:	st.d        	$s0, $a0, 32
+   1201b6498:	st.d        	$s1, $a0, 40
+   1201b649c:	st.d        	$s2, $a0, 48
+   1201b64a0:	st.d        	$s3, $a0, 56
+   1201b64a4:	st.d        	$s4, $a0, 64
+   1201b64a8:	st.d        	$s5, $a0, 72
+   1201b64ac:	st.d        	$s6, $a0, 80
+   1201b64b0:	st.d        	$s7, $a0, 88
+   1201b64b4:	st.d        	$s8, $a0, 96
+   1201b64b8:	fst.d       	$fs0, $a0, 104
+   1201b64bc:	fst.d       	$fs1, $a0, 112
+   1201b64c0:	fst.d       	$fs2, $a0, 120
+   1201b64c4:	fst.d       	$fs3, $a0, 128
+   1201b64c8:	fst.d       	$fs4, $a0, 136
+   1201b64cc:	fst.d       	$fs5, $a0, 144
+   1201b64d0:	fst.d       	$fs6, $a0, 152
+   1201b64d4:	fst.d       	$fs7, $a0, 160
+   1201b64d8:	move        	$a0, $zero
+   1201b64dc:	ret
+   1201b64e0:	beq         	$a1, $zero, 48	# 0x1201b6510
+   1201b64e4:	st.d        	$ra, $a0, 184
+   1201b64e8:	st.d        	$s0, $a0, 200
+   1201b64ec:	move        	$s0, $a0
+   1201b64f0:	pcaddi      	$t0, -27
+   1201b64f4:	jirl        	$ra, $t0, 0
+   1201b64f8:	move        	$a1, $a0
+   1201b64fc:	move        	$a0, $s0
+   1201b6500:	ld.d        	$ra, $a0, 184
+   1201b6504:	ld.d        	$s0, $a0, 200
+   1201b6508:	pcaddi      	$t0, -24940

@@ -47,13 +47,13 @@ void proc_mapstacks(pagetable_t kpgtbl) {
 #elif defined(LOONGARCH)
 
     for (p = proc; p < &proc[NPROC]; p++) {
-        char *pa = kalloc();
+        char *pa = kmalloc(4 * PGSIZE);
         if (pa == 0) panic("kalloc");
         uint64 va = KSTACK((int)(p - proc));
 #ifdef LA2K1000
-        if (mappages(kpgtbl, va, PGSIZE, (uint64)pa, PTE_P | PTE_W | PTE_MAT | PTE_D) != 0)
+        if (mappages(kpgtbl, va, 4 * PGSIZE, (uint64)pa, PTE_P | PTE_W | PTE_MAT | PTE_D) != 0)
 #else
-        if (mappages(kpgtbl, va, PGSIZE, (uint64)pa, PTE_NX | PTE_P | PTE_W | PTE_MAT | PTE_D) != 0)
+        if (mappages(kpgtbl, va, 4 * PGSIZE, (uint64)pa, PTE_NX | PTE_P | PTE_W | PTE_MAT | PTE_D) != 0)
 #endif
             panic("kvmmap");
     }
@@ -182,7 +182,7 @@ found:
     // which returns to user space.
     memset(&p->context, 0, sizeof(p->context));
     p->context.ra = (uint64)forkret;
-    p->context.sp = p->kstack + PGSIZE;
+    p->context.sp = p->kstack + 4*PGSIZE;
 
     // Initialize VMA array
     memset(&p->vmas, 0, NVMA * sizeof(struct vma));

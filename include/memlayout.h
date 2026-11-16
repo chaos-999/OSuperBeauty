@@ -163,7 +163,7 @@
 #define MMAPEND (USTACK)  // mmap 空间位于栈之下
 
 // 每进程内核栈（使用高位地址空间）
-#define KSTACK(p) (TRAPFRAME - ((p) + 1) * 2 * PGSIZE)
+#define KSTACK(p) (TRAPFRAME - ((p) + 1) * 4 * PGSIZE)
 
 // 便捷宏
 #define PA2VA(pa) ((pa) & (~(DMWIN_MASK)))
@@ -198,7 +198,7 @@
 #define USTACK_TOP (USTACK + USTACK_PAGE * PGSIZE)
 
 // map kernel stacks beneath the trampframe, each surrounded by invalid guard pages.
-#define KSTACK(p) (TRAPFRAME - ((p) + 1) * 2 * PGSIZE)
+#define KSTACK(p) (TRAPFRAME - ((p) + 1) * 4 * PGSIZE)
 
 // User memory layout（见注释）
 #define TRAPFRAME (MAXVA - PGSIZE)

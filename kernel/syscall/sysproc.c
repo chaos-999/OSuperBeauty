@@ -254,7 +254,11 @@ uint64 sys_nanosleep(void) {
     if (rem_addr != 0 && copyin(myproc()->pagetable, (char *)(&rem), rem_addr, sizeof(rem)) < 0) {
         // do nothing, as we don't write back to 'rem'
     }
-    uint64 n = req.tv_sec * 10 + req.tv_nsec / 100000000;
+    if (req.tv_sec < 0 || req.tv_nsec < 0 || req.tv_nsec >= 1000000000) {
+        return -EINVAL;
+    }
+
+    uint64 n = timespec_to_ticks(req.tv_sec, req.tv_nsec);
     if (n == 0 && (req.tv_sec > 0 || req.tv_nsec > 0)) {
         n = 1;
     }
@@ -883,7 +887,7 @@ static inline uint64 ppoll_calc(struct proc *p, uint64 timeout_addr) {
     struct timespec timeout;
     if (copyin(p->pagetable, (char *)&timeout, timeout_addr, sizeof(timeout)) < 0) return 0;
 
-    return ticks + timeout.tv_sec * 100 + timeout.tv_nsec / 10000000;
+    return ticks + timespec_to_ticks(timeout.tv_sec, timeout.tv_nsec);
 }
 
 uint64 sys_ppoll(void) {

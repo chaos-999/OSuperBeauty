@@ -8,6 +8,10 @@
 > 修复方式是解析 `PT_INTERP`、在独立基址加载解释器、把入口切换到解释器，
 > 并补齐 `AT_BASE`；同时兼容镜像里没有 `/lib`、解释器实际放在 `/musl/lib`
 > 或 `/glibc/lib` 的布局。**
+>
+> **补充（2026-11-16）：** LA 分支已移植同一套逻辑，并补齐 LA 的
+> `AT_PHDR/AT_PHENT/AT_PHNUM/AT_BASE`，详见
+> `47-la-dynamic-linker-pt-interp.md`。
 
 ---
 

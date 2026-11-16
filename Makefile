@@ -531,6 +531,23 @@ clean-test:
 clean-testlog:
 	rm -f os_serial_out_*.txt
 
+# 串口输出写入日志，供 tools/live_monitor.py 实时查看
+qemu-la-log: kernel-la sdcard-la.img
+	$(QEMU_LA) $(QEMUOPTS_LA) 2>&1 | tee os_serial_out_la.txt
+
+qemu-rv-log: kernel-rv sdcard-rv.img
+	$(QEMU_RV) $(QEMUOPTS_RV) 2>&1 | tee os_serial_out_rv.txt
+
+# 手机实时看板：默认自动选择最新的 os_serial_out_*.txt
+monitor:
+	python3 tools/live_monitor.py --log auto --port 8080
+
+monitor-la:
+	python3 tools/live_monitor.py --log os_serial_out_la.txt --port 8080
+
+monitor-rv:
+	python3 tools/live_monitor.py --log os_serial_out_rv.txt --port 8080
+
 # 一键测评：先清理残留 img，再构建并运行测评
 # 使用方式: make test
 # 如需指定架构: make test-rv  或  make test-la
@@ -550,4 +567,4 @@ test-la: clean-test kernel-la sdcard-la.img
 		-v /home/zhangshuoyu/oscomp-testdata:/mnt/cghook/ \
 		zhouzhouyi/os-contest:20260510 python3 /cg/kernel.zip
 
-.PHONY: all qemu qemu-la qemu-gdb qemu-gdb-la clean tags qemu-sh qemu-la-sh clean-test test test-la
+.PHONY: all qemu qemu-la qemu-gdb qemu-gdb-la clean tags qemu-sh qemu-la-sh clean-test test test-la qemu-la-log qemu-rv-log monitor monitor-la monitor-rv

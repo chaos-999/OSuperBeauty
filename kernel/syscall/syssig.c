@@ -111,14 +111,11 @@ uint64 sys_rt_sigtimedwait(void) {
     uint64 timeout_ticks = 0;
     if (ts_ptr != 0) {
         /*
-         * trap.c reprograms the timer every 100000 timebase cycles and the
-         * RISC-V timebase runs at 10 MHz, so one tick is 10 ms (100 Hz).
-         * The old code assumed 10 Hz, which made a 5 second timeout expire
-         * after only 0.5 second and killed runtest.exe's child while it was
-         * still loading the test binary.
+         * 不能写死 100 Hz：RV timebase 是 10 MHz/100000 cycles，
+         * LA stable timer 是 100 MHz/0x1000000 cycles，两者 tick 频率不同。
+         * 统一交给 timespec_to_ticks() 按平台换算。
          */
-        timeout_ticks = (uint64)ts.tv_sec * 100 +
-                        ((uint64)ts.tv_nsec + 9999999) / 10000000;
+        timeout_ticks = timespec_to_ticks(ts.tv_sec, ts.tv_nsec);
     }
 
     for (;;) {

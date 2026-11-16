@@ -550,6 +550,50 @@ int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) {
             }
         }
     }
+    /*
+     * sys_mmap() only records a VMA; its pages are allocated lazily on the
+     * first fault (see vmatrylazytouch()).  The loops above copy [0, sz) and
+     * the fixed user stack, but they do not cover mmap()ed regions.  Without
+     * the loop below a fork()ed child gets brand-new zero pages for every
+     * anonymous VMA instead of a copy of the parent's data.
+     *
+     * This is especially visible with musl: musl keeps malloc state and
+     * busybox ash's parse/command state in mmap()ed memory.  After fork()
+     * those words become zero in the child, so the shell silently loses the
+     * command it was about to execute (busybox-musl prints nothing and exits
+     * 0, while busybox-glibc works because glibc happens to keep that state
+     * in brk()/stack memory).
+     *
+     * Copy only pages that are already present.  Pages that were never
+     * touched need no copy: they are zero for anonymous mappings, and
+     * file-backed VMAs still have their metadata (file + offset) copied by
+     * fork()/clone(), so they can be faulted in from the file.
+     */
+    {
+        struct proc *pp = myproc();
+        for (int vi = 0; vi < NVMA; vi++) {
+            struct vma *v = &pp->vmas[vi];
+            if (!v->valid) continue;
+            for (i = v->addr; i < v->addr + v->length; i += PGSIZE) {
+                if ((pte = walk(old, i, 0)) == 0 || (*pte & PTE_V) == 0) continue;
+#ifdef RISCV
+                pa = PTE2PA(*pte);
+#elif defined(LOONGARCH)
+                pa = PTE2PA(*pte) | DMWIN_MASK;
+#endif
+                flags = PTE_FLAGS(*pte);
+                pte_t *dstpte = walk(new, i, 0);
+                if (dstpte && (*dstpte & PTE_V)) continue;
+                if ((mem = kalloc()) == 0) goto err;
+                memmove(mem, (char *)pa, PGSIZE);
+                if (mappages(new, i, PGSIZE, (uint64)mem, flags) != 0) {
+                    kfree(mem);
+                    goto err;
+                }
+            }
+        }
+    }
+
     if (myproc()->pid != 1) {
         for (i = USTACK; i < USTACK_TOP; i += PGSIZE) {
             if ((pte = walk(old, i, 0)) == 0) panic("uvmcopy: pte should exist");

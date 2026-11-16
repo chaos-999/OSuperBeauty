@@ -43,7 +43,7 @@ char *copy_file_range_name[] = {"copy-file-range-test-1", "copy-file-range-test-
 
 void test_pre() {
     int pid;
-    char *bb_testcode_local[] = {"busybox", "sh", "busybox_testcode.sh", NULL};
+    char *bb_testcode_local[] = {"busybox", "ash", "busybox_testcode.sh", NULL};
 
     int basic_testcases = 32;
 

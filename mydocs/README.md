@@ -22,8 +22,8 @@
 | `16-console-output-race.md` | 🔍 控制台输出竞争完整诊断与修复：根因三层分析（consolewrite 无锁/timer 抢断/测试集 printf 分段 write）→ 方案评估 → 行缓冲实现 → 验证 | 2026-06-05 07:59 |
 | `17-buddy-panic-extent-double-free.md` | ⚠️ **治标方向**：buddy_free panic 诊断与修复：ext4 extent tree split 失败 → error path 对 path 二次释放 → buddy 将 panic 降级为 warning（根因未修） | 2026-06-05 11:12 |
 | `18-musl-test-gap-analysis.md` | 🔍 musl 测试缺失分析：三层根因（init 代码路径/动态扫描器被禁用/LA execve 缺 auxv）、LA busybox-musl 静默崩溃诊断、修复方案 | 2026-06-06 19:02 |
-| `19-la-musl-debug-full.md` | 🔬 LA musl 测试调试全记录：auxv 修复→pcalau12i 二进制 bug 定位→测评环境问题→glibc sleep namei 分析→最终修复汇总 | 2026-06-07 00:17 |
-| `20-glibc-vs-musl.md` | 📚 glibc 与 musl 区别详解：启动初始化、syscall 发起、GOT 策略、内存分配、信号处理五大维度对比，本次调试中差异的实际影响 | 2026-06-07 00:35 |
+| `19-la-musl-debug-full.md` | ⚠️ **pcalau12i 结论错误**：LA musl 测试调试全记录；auxv 等部分仍有效，但 busybox-musl 静默退出真正原因是 fork 未复制 mmap/VMA 页，见 `46` | 2026-06-07 00:17 |
+| `20-glibc-vs-musl.md` | ⚠️ **pcalau12i 章节错误**：glibc 与 musl 区别详解；GOT/pcalau12i 导致 busybox-musl 失败的结论已被 `46` 推翻，其余对比仍可参考 | 2026-06-07 00:35 |
 | `21-ltp-syscall-list.md` | 📋 LTP 测试集 syscall 完整清单：360 个测试 syscall 按类别分组、用例数统计、SpringOS 实现状态对照、构建排除说明 | 2026-06-07 11:25 |
 | `22-execve-enoexec-fix.md` | 🔧 execve 非 ELF 文件返回 ENOEXEC 修复实录：libctest run-dynamic.sh "Operation not permitted" 根因（内核 -1 → musl → EPERM → busybox 不 fallback）→ 4 处修改 → xv6 vs musl 返回值约定分析 | 2026-06-07 13:12 |
 | `23-proc-self-exe-fix.md` | 🔧 libctest 脚本执行链完整修复实录：EPERM→ENOEXEC（exec.c）→ busybox ash tryexec() 源码分析→发现用 /proc/self/exe 而非 /bin/sh→内核 5 文件实现 /proc/self/exe 虚拟路径→完整链路打通 | 2026-06-07 14:24 |
@@ -41,13 +41,18 @@
 | `35-initcode-12kb-overflow-fix.md` | 🔧 Initcode 12KB 溢出修复：uvmfirst 加第 4 页 + p->sz 动态计算，解决 LA basic test 全部崩溃 | 2026-06-28 15:20 |
 | `36-rv-bb-testcode-fix.md` | 🔧 RV busybox argv 损坏修复：bb_testcode 全局→局部变量 | 2026-06-28 15:21 |
 | `37-ext4-lru-use-after-free.md` | ❌ **结论错误**：RV ext4 块缓存 LRU 树 Use-After-Free 分析：ext4_journal inc_ref 绕过 LRU 维护（journal 已关闭，真正原因是 ext4 并发重入，见 `39`） | 2026-06-28 15:21 |
-| `38-la-busybox-musl-silent-exit.md` | 🔍 LA busybox-musl 静默退出诊断：musl pcalau12i 工具链 bug，非内核问题 | 2026-06-28 15:22 |
+| `38-la-busybox-musl-silent-exit.md` | ❌ **结论错误**：LA busybox-musl 静默退出诊断；曾误判为 `pcalau12i` 工具链 bug，实际是 `uvmcopy()` 未复制 mmap/VMA 页，见 `46` | 2026-06-28 15:22 |
 | `39-ext4-concurrent-lru-corruption.md` | 🔍 RV ext4 LRU 红黑树崩溃/卡死定位：ext4 挂载锁未安装导致并发重入，修复 fstat/statx 引用泄漏 | 2026-11-11 |
-| `40-runtest-timeout-and-sigkill.md` | 🔍 libc-test runtest.exe 全 FAIL/卡死复盘：sigtimedwait tick 10Hz/100Hz 换算错误 + SIGKILL 未唤醒睡眠进程 | 2026-11-11 |
+| `40-runtest-timeout-and-sigkill.md` | 🔍 libc-test runtest.exe 全 FAIL/卡死复盘：sigtimedwait tick 换算错误 + SIGKILL 未唤醒睡眠进程；含 LA tick≈5.96Hz / `timespec_to_ticks()` 补充 | 2026-11-11 |
 | `41-rv-dynamic-linker-pt-interp.md` | 🔧 RV 动态链接缺失支持修复：解析 PT_INTERP、加载解释器到 0x40000000、设置 AT_BASE/AT_ENTRY、兼容 /musl/lib 与 /glibc/lib 路径 | 2026-11-12 |
 | `42-elf-dynamic-linker-primer.md` | 📚 ELF 与动态链接零基础入门：ELF header/program header/PT_LOAD/PT_INTERP、静态 vs 动态链接、GOT/PLT/RELA、AT_PHDR/AT_ENTRY/AT_BASE，并逐项对应 41 的实现 | 2026-11-12 |
 | `43-clear-child-tid-copyout-order.md` | 🔍 basic 全通过但反复 copyout failed 诊断：普通进程 exit() 先 vmaunmap 再清零 clear_child_tid，导致 TLS/TCB 页已不存在；线程退出路径不受影响 | 2026-11-15 |
 | `44-namei-proc-self-exe-and-la-execve-fix.md` | 🔧 `/proc/self/exe` 的 namei 长度判断 off-by-one 修正 + LA execve 返回 -ENOENT、维护 exec_path、kill/send_signal 返回 -ESRCH | 2026-11-15 |
+| `45-la-kernel-stack-4page.md` | 🔧 LA 内核栈从 1 页扩到 4 页：`kernelvec` 入口压栈触发 PIS / `panic: kerneltrap` 的根因、KSTACK/分配/映射/`sp` 四处统一修改 | 2026-11-16 |
+| `46-fork-mmap-vma-copy.md` | 🔧 fork 未复制 mmap/VMA 页导致 busybox-musl 静默退出：`pcalau12i` 旧结论勘误、`sys_mmap` 懒分配、`uvmcopy` 复制范围、修复与 basic/init 未暴露原因 | 2026-11-16 |
+| `47-la-dynamic-linker-pt-interp.md` | 🔧 LA 动态链接支持：移植 RV 的 PT_INTERP 查找/加载、补齐 AT_PHDR/AT_BASE/AT_ENTRY、修正 PIE first_load；musl 动态程序通过，glibc 仍受 MAP_FIXED 限制 | 2026-11-16 |
+| `48-live-monitor-tool.md` | 📱 手机实时查看测评进度：`tools/live_monitor.py` 串口日志看板、SSE 推送、测试组/用例/失败解析、`make monitor` 用法 | 2026-11-16 |
+| `49-busybox-while-redirect-fix.md` | 🔧 busybox `while read` 卡住：LA 的 `sh` 是 hush，循环执行外部 busybox 会卡；内核 init 改用 `ash` 启动，镜像脚本保持原样 | 2026-11-17 |
 
 ## 勘误与错误方向标记
 
@@ -56,6 +61,7 @@
 | 旧文档 | 标记 | 问题 | 以哪篇为准 |
 |--------|------|------|------------|
 | `37-ext4-lru-use-after-free.md` | ❌ **结论错误** | 把 ext4 LRU 树损坏归因于 `ext4_journal.c` 的 `ext4_bcache_inc_ref()` 和缓存 shake；但 `CONFIG_JOURNALING_ENABLE=0`，journal 路径不参与，真正原因是 ext4 挂载锁未安装导致的多进程并发重入 | `39-ext4-concurrent-lru-corruption.md` |
+| `19-la-musl-debug-full.md`、`20-glibc-vs-musl.md`、`38-la-busybox-musl-silent-exit.md` | ❌ **结论错误** | 把 busybox-musl 静默退出归因于 `pcalau12i` 链接偏移；按 LoongArch 语义重算后目标地址落在 `.got` 内，二进制正常，真正原因是 `uvmcopy()` 只复制 `[0,p->sz)` 和用户栈，漏掉 mmap/VMA 已缺页加载的页 | `46-fork-mmap-vma-copy.md` |
 | `34-eval-debug-summary.md` | ⚠️ **部分过时** | 其中 ext4 LRU use-after-free 的“journal inc_ref”根因沿用自 `37`，同样不成立 | `39-ext4-concurrent-lru-corruption.md` |
 | `27-libctest-musl-full.md` | ⚠️ **部分过时** | 对 `runtest.exe` 的分析停留在“sigtimedwait 睡在 `ticks` 上、wakeup 不匹配、waitpid 返回 EAGAIN”；当前实际根因是 tick 换算 10 Hz/100 Hz 错误，以及 SIGKILL 未唤醒睡眠进程 | `40-runtest-timeout-and-sigkill.md` |
 | `17-buddy-panic-extent-double-free.md` | ⚠️ **治标方向** | 用 buddy warning 降级掩盖 ext4 extent path 的 double-free，属于避免 panic 的防御性处理，并未修复根因 | 暂无后续根因文档，使用前需重新评估 |

@@ -55,15 +55,16 @@ static void set_exec_path(const char *path) {
     safestrcpy(p->exec_path, absolute, MAXPATH);
 }
 
-#ifdef RISCV
+#if defined(RISCV) || defined(LOONGARCH)
 /*
  * 动态链接二进制在 ELF 的 PT_INTERP 中给出解释器路径，例如：
- *   /lib/ld-musl-riscv64-sf.so.1
- *   /lib/ld-musl-riscv64.so.1
- *   /lib/ld-linux-riscv64-lp64d.so.1
+ *   RISC-V: /lib/ld-musl-riscv64-sf.so.1
+ *           /lib/ld-linux-riscv64-lp64d.so.1
+ *   LA:     /lib64/ld-musl-loongarch-lp64d.so.1
+ *           /lib64/ld-linux-loongarch-lp64d.so.1
  *
- * 测试镜像并没有 /lib 目录：musl 的 libc.so 在 /musl/lib/libc.so，
- * glibc 的解释器在 /glibc/lib/ld-linux-riscv64-lp64d.so.1。
+ * 测试镜像并没有这些标准路径：musl 的 libc.so 在 /musl/lib/libc.so，
+ * glibc 的解释器在 /glibc/lib/ld-linux-*-lp64d.so.1。
  * 所以先按原路径找，再尝试镜像里的实际位置。
  */
 static struct inode *exec_open_interp(const char *path) {
@@ -87,8 +88,12 @@ static struct inode *exec_open_interp(const char *path) {
             return ip;
     }
 
-    /* musl 的 libc.so 同时就是动态链接器本身。 */
-    if (strncmp(base, "ld-musl-riscv64", 15) == 0)
+    /*
+     * musl 的 libc.so 同时就是动态链接器本身。镜像里没有
+     * ld-musl-riscv64*.so.1 / ld-musl-loongarch-lp64d.so.1 这些名字，
+     * 统一回落到 /musl/lib/libc.so。
+     */
+    if (strncmp(base, "ld-musl-", 8) == 0)
         return namei("/musl/lib/libc.so");
 
     return 0;
@@ -122,13 +127,17 @@ static int exec_load_interp(pagetable_t pagetable, struct inode *ip,
             return -1;
 
         /* 解释器不进入 p->sz，单独映射到 base 以上的固定区域。 */
+#ifdef RISCV
+        int perm = PTE_W | PTE_X | PTE_R | PTE_U;
+#elif defined(LOONGARCH)
+        int perm = PTE_P | PTE_W | PTE_PLV | PTE_MAT | PTE_D;
+#endif
         for (uint64 pg = PGROUNDDOWN(va); pg < PGROUNDUP(vend); pg += PGSIZE) {
             char *mem = kalloc();
             if (mem == 0)
                 return -1;
             memset(mem, 0, PGSIZE);
-            if (mappages(pagetable, pg, PGSIZE, (uint64)mem,
-                         PTE_W | PTE_X | PTE_R | PTE_U) < 0) {
+            if (mappages(pagetable, pg, PGSIZE, (uint64)mem, perm) < 0) {
                 kfree(mem);
                 return -1;
             }
@@ -170,7 +179,9 @@ static int exec_load_interp(pagetable_t pagetable, struct inode *ip,
     *entry_out = base + lelf.entry;
     return 0;
 }
+#endif /* RISCV || LOONGARCH */
 
+#ifdef RISCV
 int execve(char *path, char **argv, char **envp) {
     char *s, *last;
     int i, off, ret = -1;
@@ -459,11 +470,15 @@ enum redir {
 
 int execve(char *path, char **argv, char **envp) {
     char *s, *last;
-    int i, off;
+    int i, off, ret = -1;
     uint64 argc, envc, sz = 0, sp, ustack[MAXARG], estack[MAXENV], stackbase;
     struct elfhdr elf;
     struct inode *ip;
     struct proghdr ph;
+    char interp_buf[MAXPATH] = {0};
+    uint64 interp_off = 0, interp_len = 0;
+    uint64 interp_base = 0, interp_entry = 0;
+    int has_interp = 0;
     pagetable_t pagetable = 0, oldpagetable;
     struct proc *p = myproc();
     int has_setuid = 0, has_setgid = 0;
@@ -486,16 +501,36 @@ int execve(char *path, char **argv, char **envp) {
     }
 
     if (ip->i_op->read(ip, 0, (uint64)&elf, 0, sizeof(elf)) != sizeof(elf)) goto bad;
-    if (elf.magic != ELF_MAGIC) goto bad;
+    if (elf.magic != ELF_MAGIC) {
+        ret = -ENOEXEC;  // 非 ELF（脚本）：让 shell 回退到解释执行
+        goto bad;
+    }
     if ((pagetable = proc_pagetable(p)) == 0) goto bad;
 
+    uint64 first_load_vaddr = 0;
     uint64 start_vaddr = 0;
+    int first_load_set = 0;
+    int start_set = 0;
     for (i = 0, off = elf.phoff; i < elf.phnum; i++, off += sizeof(ph)) {
         if (ip->i_op->read(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph)) goto bad;
+        if (ph.type == ELF_PROG_INTERP) {
+            if (ph.filesz < MAXPATH) {
+                interp_off = ph.off;
+                interp_len = ph.filesz;
+            }
+            continue;
+        }
         if (ph.type == ELF_PROG_LOAD) {
+            if (!first_load_set || ph.vaddr < first_load_vaddr) {
+                first_load_vaddr = ph.vaddr;
+                first_load_set = 1;
+            }
             if (ph.memsz < ph.filesz) goto bad;
             if (ph.vaddr + ph.memsz < ph.vaddr) goto bad;
-            if (start_vaddr == 0) start_vaddr = ph.vaddr;
+            if (!start_set) {
+                start_vaddr = ph.vaddr;
+                start_set = 1;
+            }
 
             uint64 sz1;
 #ifdef LA2K1000
@@ -518,8 +553,35 @@ int execve(char *path, char **argv, char **envp) {
         }
     }
 
+    /* 读取 PT_INTERP 指定的动态链接器路径。 */
+    if (interp_len > 0) {
+        if (ip->i_op->read(ip, 0, (uint64)interp_buf, interp_off, interp_len) !=
+            (int)interp_len)
+            goto bad;
+        interp_buf[interp_len] = '\0';
+    }
+
     ip->i_op->unlock(ip);
     ip = 0;
+
+    /* 动态链接：加载解释器，并把入口切到解释器。 */
+    if (interp_len > 0) {
+        struct inode *lip = exec_open_interp(interp_buf);
+        if (lip == 0) {
+            printf("execve: interpreter not found: %s\n", interp_buf);
+            ret = -ENOENT;
+            goto bad;
+        }
+        lip->i_op->lock(lip);
+        interp_base = 0x40000000;
+        if (exec_load_interp(pagetable, lip, interp_base, &interp_entry) < 0) {
+            lip->i_op->unlock(lip);
+            ret = -ENOEXEC;
+            goto bad;
+        }
+        lip->i_op->unlock(lip);
+        has_interp = 1;
+    }
 
     p = myproc();
     uint64 oldsz = p->sz;
@@ -570,7 +632,12 @@ int execve(char *path, char **argv, char **envp) {
     aux[0] = 0;
     aux[1] = 0;
     aux[2] = 0;  // 初始化
+    alloc_aux(aux, AT_HWCAP, 0);
     alloc_aux(aux, AT_PAGESZ, PGSIZE);
+    alloc_aux(aux, AT_PHDR, first_load_vaddr + elf.phoff);
+    alloc_aux(aux, AT_PHENT, elf.phentsize);
+    alloc_aux(aux, AT_PHNUM, elf.phnum);
+    alloc_aux(aux, AT_BASE, has_interp ? interp_base : 0);
     alloc_aux(aux, AT_ENTRY, elf.entry);
     alloc_aux(aux, AT_UID, p->uid);
     alloc_aux(aux, AT_EUID, has_setuid ? file_uid : p->euid);
@@ -648,8 +715,8 @@ int execve(char *path, char **argv, char **envp) {
     p->pagetable = pagetable;
     p->sz = sz;
 
-    // 设置寄存器：设置 PC 与 SP；同时填充 a0/a1/a2 以满足 LA/Linux 约定
-    p->trapframe->era = elf.entry;
+    // 设置寄存器：动态 ELF 从解释器入口开始执行
+    p->trapframe->era = has_interp ? interp_entry : elf.entry;
     p->trapframe->sp = final_sp;
     p->trapframe->a0 = argc;
     p->trapframe->a1 = argv_ptr;
@@ -663,10 +730,11 @@ int execve(char *path, char **argv, char **envp) {
     return 0;
 
 bad:
-    printf("execve: Failed for path %s\n", path);
+    if (ret != -ENOEXEC)
+        printf("execve: Failed for path %s ret=%d\n", path, ret);
     if (pagetable) proc_freepagetable(pagetable, sz);
     if (ip) ip->i_op->unlock(ip);
-    return -1;
+    return ret;
 }
 
 #endif
