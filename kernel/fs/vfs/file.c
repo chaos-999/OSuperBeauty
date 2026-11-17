@@ -246,7 +246,17 @@ int fileread(struct file *f, uint64 addr, int n) {
         copyout(myproc()->pagetable, addr, (char *)&a, sizeof(char));
         return 0;
     } else if (f->f_type == 8) {
-        return 0;
+        // /dev/zero: every read returns n zero bytes (never EOF).
+        if (n <= 0) return 0;
+        char zeros[512] = {0};
+        int remain = n;
+        while (remain > 0) {
+            int chunk = remain < (int)sizeof(zeros) ? remain : (int)sizeof(zeros);
+            if (copyout(myproc()->pagetable, addr, zeros, chunk) < 0) return -1;
+            addr += chunk;
+            remain -= chunk;
+        }
+        return n;
     } else {
         panic("fileread");
     }
