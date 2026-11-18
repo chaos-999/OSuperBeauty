@@ -15,4 +15,4 @@
 #define FSSIZE 2000                // size of file system in blocks
 #define MAXPATH 260                // maximum file path name
 #define VFS_MAX_FS 4               // VFS 中最多的fs个数
-#define NVMA 16                    // maximum VMA regions per process
+#define NVMA 3072                  // maximum VMA regions per process

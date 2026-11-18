@@ -200,6 +200,8 @@ struct proc {
     uint64 clear_child_tid;       // Clear child tid
     uint64 robust_list_head;      // Robust futex list head
     int pt_shared;                // Page table shared via CLONE_VM
+    int tg_shared;                // Thread group shares one page table
+    struct proc *leader;          // Thread group leader (owns shared sz)
     int uid;                      // Real user ID
     int euid;                     // Effective user ID
     int suid;                     // Saved set-user-ID

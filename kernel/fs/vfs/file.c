@@ -120,8 +120,13 @@ int filestat(struct file *f, uint64 addr) {
         if (copyout(p->pagetable, addr, (char *)(&st), sizeof(st)) < 0) return -1;
         return 0;
     }
-    // Use path-based stat so it works for both files and directories
-    if (vfs_ext_stat(f->f_path, &st) < 0) {
+    /*
+     * Use the inode behind the open file, not its path.  tmpfile() opens a
+     * file and immediately unlinks it; a path-based fstat() then fails and
+     * stdio falls back to an unbuffered FILE, making 5M putc/getc calls take
+     * minutes instead of milliseconds.
+     */
+    if (vfs_ext_fstat(f, &st) < 0) {
         return -1;
     }
     if (copyout(p->pagetable, addr, (char *)(&st), sizeof(st)) < 0) return -1;
@@ -144,8 +149,8 @@ int filestatx(struct file *f, uint64 addr) {
         if (copyout(p->pagetable, addr, (char *)(&sx), sizeof(sx)) < 0) return -1;
         return 0;
     }
-    // Use path-based stat so directories are handled
-    if (vfs_ext_stat(f->f_path, &ks) < 0) {
+    /* Same reason as filestat(): use the open inode, not the path. */
+    if (vfs_ext_fstat(f, &ks) < 0) {
         return -1;
     }
     memset(&sx, 0, sizeof(sx));
@@ -246,7 +251,23 @@ int fileread(struct file *f, uint64 addr, int n) {
         copyout(myproc()->pagetable, addr, (char *)&a, sizeof(char));
         return 0;
     } else if (f->f_type == 8) {
-        return 0;
+        /*
+         * /dev/zero: every read fills the user buffer with zero bytes and
+         * returns the requested count; it never signals EOF.  (/dev/null is
+         * f_type == 9 above and correctly returns 0.)  A shared static
+         * zero buffer avoids re-zeroing 512 bytes of kernel stack on every
+         * read while still chunking large requests.
+         */
+        if (n <= 0) return 0;
+        static char zeros[512];
+        int remain = n;
+        while (remain > 0) {
+            int chunk = remain < (int)sizeof(zeros) ? remain : (int)sizeof(zeros);
+            if (copyout(myproc()->pagetable, addr, zeros, chunk) < 0) return -1;
+            addr += chunk;
+            remain -= chunk;
+        }
+        return n;
     } else {
         panic("fileread");
     }

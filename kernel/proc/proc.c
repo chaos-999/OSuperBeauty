@@ -138,10 +138,12 @@ found:
     p->pid = allocpid();
     p->tgid = p->pid; // Default: tgid == pid (single-threaded process)
     p->tid = p->pid;  // Default: tid == pid
+    p->leader = p;    // Default: own thread group
     p->state = USED;
     p->clear_child_tid = 0;
     p->robust_list_head = 0;
     p->pt_shared = 0;
+    p->tg_shared = 0;
     p->uid = 0;
     p->euid = 0;
     p->suid = 0;
@@ -226,6 +228,8 @@ static void freeproc(struct proc *p) {
     p->chan = 0;
     p->killed = 0;
     p->xstate = 0;
+    p->leader = 0;
+    p->tg_shared = 0;
     p->state = UNUSED;
 }
 
@@ -374,8 +378,9 @@ void userinit(void) {
 int growproc(int n) {
     uint64 sz;
     struct proc *p = myproc();
+    struct proc *owner = (p->leader && p->leader->state != UNUSED) ? p->leader : p;
 
-    sz = p->sz;
+    sz = owner->sz;
     if (n > 0) {
 #ifdef RISCV
         if ((sz = uvmalloc(p->pagetable, sz, sz + n, PTE_W)) == 0) {
@@ -390,6 +395,7 @@ int growproc(int n) {
     } else if (n < 0) {
         sz = uvmdealloc(p->pagetable, sz, sz + n);
     }
+    owner->sz = sz;
     p->sz = sz;
     return 0;
 }
@@ -506,6 +512,12 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
     if (flags & CLONE_THREAD) {
         np->tgid = p->tgid;
         np->tid = allocpid();  // Unique thread ID
+        /* Threads must share the heap break, otherwise two threads calling
+         * brk() map overlapping pages and mappages() panics on remap. */
+        np->leader = p->leader ? p->leader : p;
+        /* Mark the whole group so every member remaps TRAPFRAME on return. */
+        np->tg_shared = 1;
+        p->tg_shared = 1;
     }
 
     // CLONE_SIGHAND: share signal handler table (increment refcount)
@@ -600,6 +612,8 @@ void reparent(struct proc *p) {
     struct proc *pp;
 
     for (pp = proc; pp < &proc[NPROC]; pp++) {
+        /* Threads have no wait4() parent; never hand them to init. */
+        if (pp->tid != pp->tgid) continue;
         if (pp->parent == p) {
             pp->parent = initproc;
             wakeup(initproc);
@@ -615,10 +629,40 @@ void exit(int status) {
 
     if (p == initproc) panic("init exiting");
 
+    /*
+     * exit_group() semantics: when the thread-group leader exits, the whole
+     * group must go away.  Linux keeps the shared address space alive until
+     * every thread is gone; we must do the same, otherwise the leader's
+     * cleanup frees the page table / mmap regions while sibling threads are
+     * still running on them.
+     */
     // 区分线程退出与主线程/进程退出
     // CLONE_THREAD 创建的线程：tid != tgid，只清理线程私有资源
     // 主线程（或单线程进程）：tid == tgid，清理全部进程资源
     int is_thread = (p->tid != p->tgid);
+
+    if (!is_thread) {
+        for (;;) {
+            struct proc *q;
+            int alive = 0;
+            for (q = proc; q < &proc[NPROC]; q++) {
+                if (q == p || q->state == UNUSED) continue;
+                if (q->tgid != p->tgid || q->tid == q->tgid) continue;
+                acquire(&q->lock);
+                if (q->state != UNUSED && q->state != ZOMBIE) {
+                    alive = 1;
+                    q->killed = 1;
+                    void *chan = q->chan;
+                    release(&q->lock);
+                    if (chan) wakeup(chan);
+                } else {
+                    release(&q->lock);
+                }
+            }
+            if (!alive) break;
+            yield();
+        }
+    }
 
     // 清除 clear_child_tid 并 futex_wake（通知 pthread_join 等待者）
     /*
@@ -637,8 +681,7 @@ void exit(int status) {
 
     if (!is_thread) {
         // === 主线程/进程退出：清理全部资源 ===
-
-        // Close all open files.
+            // Close all open files.
         for (int fd = 0; fd < NOFILE; fd++) {
             if (p->ofile[fd]) {
                 struct file *f = p->ofile[fd];
@@ -649,6 +692,7 @@ void exit(int status) {
 
         // 如果页表不是共享的（CLONE_VM），清理 VMA
         if (!p->pt_shared) {
+            int nv = 0;
             for (int i = 0; i < NVMA; i++) {
                 struct vma *v = &p->vmas[i];
                 if (v->valid) {
@@ -854,6 +898,8 @@ int wait4(int pid, uint64 wstatus_addr, int options) {
         found_pid = 0;
 
         for (pp = proc; pp < &proc[NPROC]; pp++) {
+            /* skip threads: they are reaped by the scheduler, not wait4 */
+            if (pp->tid != pp->tgid) continue;
             if (pp->parent == p) {
                 acquire(&pp->lock);
                 havekids = 1;
@@ -927,6 +973,20 @@ void scheduler(void) {
 
         for (p = proc; p < &proc[NPROC]; p++) {
             acquire(&p->lock);
+
+            /*
+             * pthread_join() does not call wait4(), so a CLONE_THREAD child
+             * would otherwise stay ZOMBIE forever and exhaust NPROC after
+             * enough pthread_create() calls (libc-bench does 2500 of them).
+             * Reap thread zombies here; the main process still uses the
+             * normal wait4() path.
+             */
+            if (p->state == ZOMBIE && p->tid != p->tgid) {
+                freeproc(p);
+                release(&p->lock);
+                continue;
+            }
+
             if (p->state == RUNNABLE) {
                 // Switch to chosen process.  It is the process's job
                 // to release its lock and then reacquire it

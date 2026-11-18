@@ -217,7 +217,11 @@ uint64 sys_brk(void) {
     uint64 n;
 
     argaddr(0, &n);
-    addr = myproc()->sz;
+    {
+        struct proc *mp = myproc();
+        struct proc *owner = (mp->leader && mp->leader->state != UNUSED) ? mp->leader : mp;
+        addr = owner->sz;
+    }
     if (n == 0) {
         return addr;
     }
@@ -237,9 +241,21 @@ int sys_clone(void) {
     argint(0, &flags);
     argaddr(1, &stack);
     argaddr(2, &ptid);
+#ifdef RISCV
+    /*
+     * RISC-V musl/glibc clone ABI:
+     * clone(flags, stack, ptid, tls, ctid)
+     */
     argaddr(3, &tls);
     argaddr(4, &ctid);
-    // TODO
+#elif defined(LOONGARCH)
+    /*
+     * LoongArch musl clone ABI:
+     * clone(flags, stack, ptid, ctid, tls)
+     */
+    argaddr(3, &ctid);
+    argaddr(4, &tls);
+#endif
     return clone(flags, (void *)stack, (uint64)ptid, tls, (uint64)ctid);
 }
 
@@ -531,18 +547,14 @@ uint64 sys_set_tid_address(void) {
 
     argaddr(0, &tidptr);
 
-    // Store the clear_child_tid pointer
+    /*
+     * Linux set_tid_address() only records the address that the kernel must
+     * clear (and futex-wake) when this thread exits.  It must NOT write the
+     * tid to user memory: musl passes &__thread_list_lock here, and writing
+     * the tid would make the thread-list lock look permanently held.
+     */
     p->clear_child_tid = tidptr;
-
-    // For glibc compatibility, write TID to user space if requested
-    if (tidptr != 0) {
-        int tid = p->pid;
-        if (copyout(p->pagetable, tidptr, (char *)&tid, sizeof(tid)) < 0) {
-            return -EFAULT;  // EFAULT
-        }
-    }
-
-    return p->pid;
+    return p->tid;
 }
 
 // getuid - 返回real user ID
@@ -1588,14 +1600,15 @@ uint64 sys_mprotect(void) {
 
     if (addr + len < addr) return -EINVAL;
 
+    /*
+     * mmap() only records a VMA; pages are allocated lazily.  pthread_create
+     * does mmap(PROT_NONE) then mprotect(stack, PROT_READ|WRITE), so the
+     * pages are not present yet.  Do not fail on missing PTEs: only update
+     * pages that already exist, and update VMA protection for future faults.
+     */
     for (uint64 va = addr; va < addr + len; va += PGSIZE) {
         pte_t *pte = walk(p->pagetable, va, 0);
-        if (pte == 0 || (*pte & PTE_V) == 0) return -ENOMEM;
-    }
-
-    for (uint64 va = addr; va < addr + len; va += PGSIZE) {
-        pte_t *pte = walk(p->pagetable, va, 0);
-        if (pte == 0) continue;
+        if (pte == 0 || (*pte & PTE_V) == 0) continue;
 
         *pte &= ~(PTE_R | PTE_W | PTE_X);
 
@@ -1606,11 +1619,12 @@ uint64 sys_mprotect(void) {
         *pte |= PTE_U;
     }
 
-    int vma_idx = find_vma_by_addr(p, addr);
-    if (vma_idx >= 0) {
-        struct vma *v = &p->vmas[vma_idx];
-        if (v->addr == addr && v->length == len) {
+    for (int i = 0; i < NVMA; i++) {
+        struct vma *v = &p->vmas[i];
+        if (!v->valid) continue;
+        if (addr >= v->addr && addr + len <= v->addr + v->length) {
             v->prot = prot;
+            break;
         }
     }
 

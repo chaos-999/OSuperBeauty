@@ -354,6 +354,27 @@ void usertrapret(void) {
     // send syscalls, interrupts, and exceptions to uservec.S
     w_csr_eentry((uint64)uservec);
 
+    /*
+     * Threads created with CLONE_VM share the parent's page table, so the
+     * TRAPFRAME slot may still point at another thread's trapframe.  Point it
+     * at this proc's own trapframe before user registers are saved/restored.
+     */
+    /*
+     * Threads created with CLONE_VM share the parent's page table, so the
+     * TRAPFRAME slot may still point at another thread's trapframe.  Point it
+     * at this proc's own trapframe before user registers are saved/restored.
+     */
+    if (p->tg_shared) {
+        pte_t *tfpte = walk(p->pagetable, TRAPFRAME, 0);
+        if (tfpte && PTE2PA(*tfpte) != (uint64)p->trapframe) {
+#ifdef LA2K1000
+            *tfpte = PA2PTE((uint64)p->trapframe) | PTE_P | PTE_W | PTE_MAT | PTE_D | PTE_U | PTE_V;
+#else
+            *tfpte = PA2PTE((uint64)p->trapframe) | PTE_NX | PTE_P | PTE_W | PTE_MAT | PTE_D | PTE_V;
+#endif
+        }
+    }
+
     // set up trapframe values that uservec will need when
     // the process next re-enters the kernel.
     p->trapframe->kernel_pgdl = r_csr_pgdl();      // kernel page table

@@ -148,7 +148,9 @@ void usertrap(void) {
     }
 
     // give up the CPU if this is a timer interrupt.
-    if (which_dev == 2) yield();
+    if (which_dev == 2) {
+        yield();
+    }
 
     sig_deliver(p);
 
@@ -169,6 +171,21 @@ void usertrapret(void) {
     // send syscalls, interrupts, and exceptions to uservec in trampoline.S
     uint64 trampoline_uservec = TRAMPOLINE + (uservec - trampoline);
     w_stvec(trampoline_uservec);
+
+    /*
+     * Threads created with CLONE_VM share the parent's page table, so the
+     * TRAPFRAME slot may still point at the trapframe of whichever thread
+     * returned to user space last.  Point it at this proc's own trapframe:
+     * uservec/userret save and restore the user registers there.
+     */
+    if (p->tg_shared) {
+        pte_t *tfpte = walk(p->pagetable, TRAPFRAME, 0);
+        if (tfpte && PTE2PA(*tfpte) != (uint64)p->trapframe) {
+            *tfpte = PA2PTE((uint64)p->trapframe) | PTE_R | PTE_W | PTE_V;
+            sfence_vma();
+        }
+
+    }
 
     // set up trapframe values that uservec will need when
     // the process next traps into the kernel.
