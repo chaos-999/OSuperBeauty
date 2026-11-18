@@ -53,6 +53,9 @@
 | `47-la-dynamic-linker-pt-interp.md` | 🔧 LA 动态链接支持：移植 RV 的 PT_INTERP 查找/加载、补齐 AT_PHDR/AT_BASE/AT_ENTRY、修正 PIE first_load；musl 动态程序通过，glibc 仍受 MAP_FIXED 限制 | 2026-11-16 |
 | `48-live-monitor-tool.md` | 📱 手机实时查看测评进度：`tools/live_monitor.py` 串口日志看板、SSE 推送、测试组/用例/失败解析、`make monitor` 用法 | 2026-11-16 |
 | `49-busybox-while-redirect-fix.md` | 🔧 busybox `while read` 卡住：LA 的 `sh` 是 hush，循环执行外部 busybox 会卡；内核 init 改用 `ash` 启动，镜像脚本保持原样 | 2026-11-17 |
+| `50-dev-zero-read-syscall-sign-extend-fix.md` | 🔧 `/dev/zero` read 修复：返回 `n` 个零字节而非 EOF，修复 libc-test `syscall_sign_extend` 假 PASS（PR #3，已按本仓库情况调整） | 2026-11-17 |
+| `51-libcbench-all-pass.md` | 🔧 libcbench 27 项全通过：clone ABI、共享页表 TRAPFRAME、set_tid_address、brk/exit_group、NVMA/用户栈、fstat 的完整修复链 | 2026-11-18 |
+| `52-libcbench-kernel-requirements.md` | 📋 libcbench 内核功能需求 ↔ 原实现 ↔ 本次修改逐项对照（含代码） | 2026-11-18 |
 
 ## 勘误与错误方向标记
 
