@@ -663,6 +663,19 @@ int vfs_ext_stat(const char *path, struct kstat *st) {
     }
     statpath = resolved_stat;
 
+    /* /dev/null is synthesized by sys_openat() and has no ext4 inode.
+     * Report it as a character device so stat()/fstatat() can find it too. */
+    if (strcmp(statpath, "/dev/null") == 0) {
+        memset(st, 0, sizeof(*st));
+        st->st_dev = 1;
+        st->st_ino = 999;
+        st->st_mode = 0020000 | 0666; /* S_IFCHR | 0666 */
+        st->st_nlink = 1;
+        st->st_rdev = 0x0103;         /* major 1, minor 3 */
+        st->st_blksize = 4096;
+        return 0;
+    }
+
     if (strcmp(statpath, "/sbin/ls") == 0) {
         return vfs_ext_stat("/musl/busybox", st);
     }

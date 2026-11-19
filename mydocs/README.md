@@ -56,6 +56,7 @@
 | `50-dev-zero-read-syscall-sign-extend-fix.md` | 🔧 `/dev/zero` read 修复：返回 `n` 个零字节而非 EOF，修复 libc-test `syscall_sign_extend` 假 PASS（PR #3，已按本仓库情况调整） | 2026-11-17 |
 | `51-libcbench-all-pass.md` | 🔧 libcbench 27 项全通过：clone ABI、共享页表 TRAPFRAME、set_tid_address、brk/exit_group、NVMA/用户栈、fstat 的完整修复链 | 2026-11-18 |
 | `52-libcbench-kernel-requirements.md` | 📋 libcbench 内核功能需求 ↔ 原实现 ↔ 本次修改逐项对照（含代码） | 2026-11-18 |
+| `53-dev-null-stat-vfs-fix.md` | 🔧 `/dev/null` stat 修复：在 `vfs_ext_stat()` 中合成字符设备 `kstat`，修复 libc-test `stat` 的 `-ENOENT`；含调用链、方案取舍与完整回归 | 2026-11-19 |
 
 ## 勘误与错误方向标记
 
