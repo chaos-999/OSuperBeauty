@@ -389,7 +389,7 @@ uint64 sys_uname(void) {
 // Find VMA by address
 static int find_vma_by_addr(struct proc *p, uint64 addr) {
     p = proc_vma_owner(p);
-    for (int i = 0; i < NVMA; i++) {
+    for (int i = 0; i < p->vma_n; i++) {
         if (p->vmas[i].valid && p->vmas[i].addr <= addr &&
             addr < p->vmas[i].addr + p->vmas[i].length) {
             return i;
@@ -455,19 +455,20 @@ uint64 sys_mmap(void) {
     struct vma *v = 0;
     uint64 vaend = MMAPEND;
 
-    for (int i = 0; i < NVMA; i++) {
+    for (int i = 0; i < vo->vma_n; i++) {
         struct vma *vv = &vo->vmas[i];
         if (!vv->valid) {
-            if (!v) {
-                v = &vo->vmas[i];
-                v->valid = 1;
-            }
+            if (!v) v = vv;
         } else if (vv->addr < vaend) {
             vaend = PGROUNDDOWN(vv->addr);
         }
     }
-
-    if (!v) panic("mmap: no free vma");
+    if (!v) {
+        if (vo->vma_n >= NVMA) panic("mmap: no free vma");
+        v = &vo->vmas[vo->vma_n];
+        vo->vma_n++;
+    }
+    v->valid = 1;
 
     v->addr = vaend - sz;
     v->length = sz;
@@ -555,6 +556,12 @@ uint64 sys_munmap(void) {
             get_fops()->close(v->f);
         }
         v->valid = 0;
+    }
+
+    /* Shrink the high-water mark so VMA scans stay short. */
+    {
+        struct proc *vo = proc_vma_owner(p);
+        while (vo->vma_n > 0 && !vo->vmas[vo->vma_n - 1].valid) vo->vma_n--;
     }
 
     if (strcmp(myproc()->name, "git") == 0) {
@@ -1645,7 +1652,7 @@ uint64 sys_mprotect(void) {
 
     {
         struct proc *vo = proc_vma_owner(p);
-        for (int i = 0; i < NVMA; i++) {
+        for (int i = 0; i < vo->vma_n; i++) {
             struct vma *v = &vo->vmas[i];
             if (!v->valid) continue;
             if (addr >= v->addr && addr + len <= v->addr + v->length) {

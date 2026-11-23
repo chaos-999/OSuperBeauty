@@ -28,7 +28,7 @@ void trapinit(void) {
 
 struct vma *findvma(struct proc *p, uint64 va) {
     p = proc_vma_owner(p);
-    for (int i = 0; i < NVMA; i++) {
+    for (int i = 0; i < p->vma_n; i++) {
         struct vma *vv = &p->vmas[i];
         // if (vv->valid == 1) {
         //     printf("findvma: vma[%d] = %lx\n", i, vv->addr);
@@ -45,7 +45,24 @@ int vmatrylazytouch(uint64 va) {
     struct proc *p = myproc();
     struct vma *v = findvma(p, va);
     // printf("here1\n");
-    if (v == 0) return 0;
+    if (v == 0) {
+        /*
+         * Defensive demand-zero path for a hole in the brk heap: any
+         * unmapped page between heap_start and sz may be faulted in as a
+         * zero page instead of killing the process.
+         */
+        struct proc *owner = proc_vma_owner(p);
+        if (owner->heap_start == 0 || va < owner->heap_start || va >= owner->sz) return 0;
+        void *pa = kalloc();
+        if (pa == NULL) return 0;
+        memset(pa, 0, PGSIZE);
+        if (mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)pa,
+                     PTE_U | PTE_R | PTE_W) != 0) {
+            kfree(pa);
+            return 0;
+        }
+        return 1;
+    }
     // printf("here2\n");
 
     void *pa = kalloc();

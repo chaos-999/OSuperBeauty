@@ -406,7 +406,8 @@ int execve(char *path, char **argv, char **envp) {
     // Commit to the user image.
     oldpagetable = p->pagetable;
     p->pagetable = pagetable;
-    p->sz = sz;                     // Process size only includes program segments, not stack
+    p->sz = sz;
+    p->heap_start = sz;                     // Process size only includes program segments, not stack
     p->trapframe->epc = has_interp ? interp_entry : elf.entry;  // dynamic ELF starts in interpreter
     p->trapframe->sp = sp;          // initial stack pointer
     set_exec_path(path);  // for /proc/self/exe
@@ -714,6 +715,7 @@ int execve(char *path, char **argv, char **envp) {
     oldpagetable = p->pagetable;
     p->pagetable = pagetable;
     p->sz = sz;
+    p->heap_start = sz;
 
     // 设置寄存器：动态 ELF 从解释器入口开始执行
     p->trapframe->era = has_interp ? interp_entry : elf.entry;

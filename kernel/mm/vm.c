@@ -571,7 +571,7 @@ int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) {
      */
     {
         struct proc *pp = proc_vma_owner(myproc());
-        for (int vi = 0; vi < NVMA; vi++) {
+        for (int vi = 0; vi < pp->vma_n; vi++) {
             struct vma *v = &pp->vmas[vi];
             if (!v->valid) continue;
             for (i = v->addr; i < v->addr + v->length; i += PGSIZE) {

@@ -394,7 +394,9 @@ fs-la.img: $(UPROGS_LA) README
 	@echo "--- Filesystem image created successfully ---"
 
 
--include kernel/*.d user/*.d
+# Object .d files are generated next to the sources; include every directory
+# under kernel/ and user/ so a header change rebuilds all dependents.
+-include kernel/*.d kernel/*/*.d kernel/*/*/*.d user/*.d
 
 # RISC-V object file compilation rules
 %-rv.o: %.c

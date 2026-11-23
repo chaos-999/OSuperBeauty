@@ -187,6 +187,7 @@ struct proc {
     // these are private to the process, so p->lock need not be held.
     uint64 kstack;                // Virtual address of kernel stack
     uint64 sz;                    // Size of process memory (bytes)
+    uint64 heap_start;            // First address of the lazily grown brk heap
     pagetable_t pagetable;        // User page table
     struct trapframe *trapframe;  // data page for trampoline.S
     struct context context;       // swtch() here to run process
@@ -196,6 +197,7 @@ struct proc {
     char name[16];                // Process name (debugging)
     char console_buf[256];        // Per-process console write buffer
     int console_buf_pos;          // Position in console_buf
+    int vma_n;                    // High-water mark of used VMA slots
     struct vma vmas[NVMA];        // Virtual Memory Areas for mmap
     uint64 clear_child_tid;       // Clear child tid
     uint64 robust_list_head;      // Robust futex list head

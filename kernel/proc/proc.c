@@ -142,6 +142,7 @@ found:
     p->state = USED;
     p->clear_child_tid = 0;
     p->robust_list_head = 0;
+    p->heap_start = 0;
     p->pt_shared = 0;
     p->tg_shared = 0;
     p->uid = 0;
@@ -186,8 +187,15 @@ found:
     p->context.ra = (uint64)forkret;
     p->context.sp = p->kstack + 4*PGSIZE;
 
-    // Initialize VMA array
-    memset(&p->vmas, 0, NVMA * sizeof(struct vma));
+    /*
+     * Initialize the VMA array.  NVMA=3072 slots are ~147KB, and clearing all
+     * of them on every fork/clone made 2500-thread libcbench cases several
+     * times slower than the baseline.  freeproc() has already invalidated
+     * the slots up to the previous high-water mark, so only that range can
+     * be dirty.
+     */
+    for (int vi = 0; vi < p->vma_n; vi++) p->vmas[vi].valid = 0;
+    p->vma_n = 0;
 
     return p;
 }
@@ -201,7 +209,7 @@ static void freeproc(struct proc *p) {
 
     // Clean up VMA mappings
     if (!p->pt_shared) {
-        for (int i = 0; i < NVMA; i++) {
+        for (int i = 0; i < p->vma_n; i++) {
             struct vma *v = &p->vmas[i];
             if (v->valid) {
                 vmaunmap(p->pagetable, v->addr, v->length, v);
@@ -330,6 +338,7 @@ void userinit(void) {
     // and data into it.
     uvmfirst(p->pagetable, initcode_start, initcode_end - initcode_start);
     p->sz = 4 * PGSIZE;
+    p->heap_start = p->sz;
 
     // prepare for the very first "return" from kernel to user.
     p->trapframe->epc = 0;          // user program counter
@@ -352,6 +361,7 @@ void userinit(void) {
     // and data into it.
     uvmfirst(p->pagetable, initcode_start, initcode_end - initcode_start);
     p->sz = 4 * PGSIZE;
+    p->heap_start = p->sz;
 
     // prepare for the very first "return" from kernel to user.
 #ifndef LA2K1000
@@ -419,6 +429,7 @@ int fork(void) {
         return -1;
     }
     np->sz = p->sz;
+    np->heap_start = p->heap_start;
 
     // copy saved user registers.
     *(np->trapframe) = *(p->trapframe);
@@ -439,14 +450,18 @@ int fork(void) {
     for (i = 0; i < NOFILE; i++)
         if (p->ofile[i]) np->ofile[i] = get_fops()->dup(p->ofile[i]);
 
-    // Copy VMA regions
-    for (i = 0; i < NVMA; i++) {
-        if (p->vmas[i].valid) {
-            np->vmas[i] = p->vmas[i];
-            if (p->vmas[i].f != NULL) {
-                get_fops()->dup(p->vmas[i].f);
+    // Copy VMA regions (only the used high-water mark)
+    {
+        struct proc *vo = proc_vma_owner(p);
+        for (i = 0; i < vo->vma_n; i++) {
+            if (vo->vmas[i].valid) {
+                np->vmas[i] = vo->vmas[i];
+                if (vo->vmas[i].f != NULL) {
+                    get_fops()->dup(vo->vmas[i].f);
+                }
             }
         }
+        np->vma_n = vo->vma_n;
     }
 
     np->cwd.fs = p->cwd.fs;
@@ -485,6 +500,7 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
         proc_freepagetable(np->pagetable, np->sz);
         np->pagetable = p->pagetable;
         np->sz = p->sz;
+        np->heap_start = p->heap_start;
         np->pt_shared = 1;
     } else {
         if (uvmcopy(p->pagetable, np->pagetable, p->sz) < 0) {
@@ -493,6 +509,7 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
             return -1;
         }
         np->sz = p->sz;
+        np->heap_start = p->heap_start;
     }
 
     // Copy saved user registers.
@@ -574,7 +591,7 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
      */
     if (!(flags & CLONE_THREAD)) {
         struct proc *vo = proc_vma_owner(p);
-        for (i = 0; i < NVMA; ++i) {
+        for (i = 0; i < vo->vma_n; ++i) {
             if (vo->vmas[i].valid) {
                 np->vmas[i] = vo->vmas[i];
                 if (vo->vmas[i].f != NULL) {
@@ -582,6 +599,7 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
                 }
             }
         }
+        np->vma_n = vo->vma_n;
     }
 
     // Handle filesystem info based on flags
@@ -703,7 +721,7 @@ void exit(int status) {
         // 如果页表不是共享的（CLONE_VM），清理 VMA
         if (!p->pt_shared) {
             int nv = 0;
-            for (int i = 0; i < NVMA; i++) {
+            for (int i = 0; i < p->vma_n; i++) {
                 struct vma *v = &p->vmas[i];
                 if (v->valid) {
                     vmaunmap(p->pagetable, v->addr, v->length, v);

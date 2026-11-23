@@ -43,7 +43,7 @@ void trapinit(void) {
 
 struct vma *findvma(struct proc *p, uint64 va) {
     p = proc_vma_owner(p);
-    for (int i = 0; i < NVMA; i++) {
+    for (int i = 0; i < p->vma_n; i++) {
         struct vma *vv = &p->vmas[i];
         if (vv->valid == 1 && va >= vv->addr && va < vv->addr + vv->length) {
             return vv;
@@ -56,7 +56,24 @@ int vmatrylazytouch(uint64 va) {
     struct proc *p = myproc();
     struct vma *v = findvma(p, va);
     // printf("before judge vma\n");
-    if (v == 0) return 0;
+    if (v == 0) {
+        /* Defensive demand-zero page for a hole in the brk heap. */
+        struct proc *owner = proc_vma_owner(p);
+        if (owner->heap_start == 0 || va < owner->heap_start || va >= owner->sz) return 0;
+        void *pa = kalloc();
+        if (pa == NULL) return 0;
+        memset(pa, 0, PGSIZE);
+#if defined(LOONGARCH) && defined(LA2K1000)
+        int perm = PTE_P | PTE_PLV | PTE_W | PTE_MAT | PTE_D;
+#else
+        int perm = PTE_U | PTE_MAT | PTE_P | PTE_D | PTE_W;
+#endif
+        if (mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)pa, perm) != 0) {
+            kfree(pa);
+            return 0;
+        }
+        return 1;
+    }
     // printf("after judge vma\n");
 
     void *pa = kalloc();

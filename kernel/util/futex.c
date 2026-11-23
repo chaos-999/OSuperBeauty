@@ -37,6 +37,12 @@ static uint64 futex_wait_common(uint64 uaddr, uint32 val, uint32 bitset) {
 
     if (bitset == 0) return -EINVAL;
 
+    /*
+     * Fast path: avoid taking the bucket lock when the value already
+     * differs.  The authoritative check is repeated under the bucket lock
+     * below; without that re-check a waker that stores the new value and
+     * calls FUTEX_WAKE between this copyin and list_add() would be lost.
+     */
     if (copyin(p->pagetable, (char *)&current_val, uaddr, sizeof(uint32)) < 0) {
         return -EFAULT;
     }
@@ -52,6 +58,17 @@ static uint64 futex_wait_common(uint64 uaddr, uint32 val, uint32 bitset) {
     list_init(&waiter.list);
 
     acquire(&bucket->lock);
+
+    /* Re-check under the hash-bucket lock (closes the lost-wakeup race). */
+    if (copyin(p->pagetable, (char *)&current_val, uaddr, sizeof(uint32)) < 0) {
+        release(&bucket->lock);
+        return -EFAULT;
+    }
+    if (current_val != val) {
+        release(&bucket->lock);
+        return -EAGAIN;
+    }
+
     list_add(&waiter.list, &bucket->waiters);
 
     while (!waiter.woken && p->killed == 0) {
