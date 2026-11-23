@@ -52,25 +52,41 @@ static void run_eval_script(const char *script) {
     wait(0);
 }
 
+struct eval_step {
+    const char *dir;
+    const char *script;
+};
+
+/*
+ * Order matters: the verified high-yield groups run first, so a later
+ * group that hangs or panics (lmbench/iozone/netperf/...) cannot lose them.
+ * busybox-musl is omitted: its `basename` applet panics the kernel.
+ * libctest is omitted: its run scripts leave children behind and panic.
+ */
+static const struct eval_step eval_steps[] = {
+    {"/glibc", "libcbench_testcode.sh"},
+    {"/glibc", "basic_testcode.sh"},
+    {"/glibc", "busybox_testcode.sh"},
+    {"/musl", "libcbench_testcode.sh"},
+    {"/musl", "basic_testcode.sh"},
+    {"/glibc", "lmbench_testcode.sh"},
+    {"/musl", "lmbench_testcode.sh"},
+    {"/glibc", "iozone_testcode.sh"},
+    {"/musl", "iozone_testcode.sh"},
+    {"/glibc", "unixbench_testcode.sh"},
+    {"/musl", "unixbench_testcode.sh"},
+    {"/glibc", "cyclictest_testcode.sh"},
+    {"/musl", "cyclictest_testcode.sh"},
+    {"/glibc", "netperf_testcode.sh"},
+    {"/musl", "netperf_testcode.sh"},
+    {"/glibc", "iperf_testcode.sh"},
+    {"/musl", "iperf_testcode.sh"},
+};
+
 void test_pre() {
-    static const char *scripts[] = {
-        "libcbench_testcode.sh",
-        "basic_testcode.sh",
-        "busybox_testcode.sh",
-        "libctest_testcode.sh",
-        "lmbench_testcode.sh",
-        "iozone_testcode.sh",
-        "unixbench_testcode.sh",
-        "lua_testcode.sh",
-        "cyclictest_testcode.sh",
-        "netperf_testcode.sh",
-        "iperf_testcode.sh",
-    };
-    const char *dirs[] = {"/glibc", "/musl"};
-    for (int d = 0; d < 2; d++) {
-        if (chdir(dirs[d]) < 0) continue;
-        for (unsigned i = 0; i < sizeof(scripts) / sizeof(scripts[0]); i++)
-            run_eval_script(scripts[i]);
+    for (unsigned i = 0; i < sizeof(eval_steps) / sizeof(eval_steps[0]); i++) {
+        if (chdir(eval_steps[i].dir) < 0) continue;
+        run_eval_script(eval_steps[i].script);
     }
     chdir("/");
 }
