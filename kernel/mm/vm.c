@@ -570,7 +570,7 @@ int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) {
      * fork()/clone(), so they can be faulted in from the file.
      */
     {
-        struct proc *pp = myproc();
+        struct proc *pp = proc_vma_owner(myproc());
         for (int vi = 0; vi < NVMA; vi++) {
             struct vma *v = &pp->vmas[vi];
             if (!v->valid) continue;

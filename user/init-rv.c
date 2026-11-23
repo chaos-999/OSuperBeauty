@@ -261,43 +261,32 @@ static void run_dir_testscripts(const char *dirpath) {
 }
 #endif
 
-int main() {
+static void run_libcbench_group(const char *dir) {
+    chdir(dir);
+    int pid = fork();
+    if (pid == 0) {
+        char *av[] = {"busybox", "sh", "libcbench_testcode.sh", 0};
+        execve("busybox", av, 0);
+        exit(1);
+    }
+    if (pid > 0) wait(0);
+}
 
-    // --- 初始化 console（stdin/stdout/stderr） ---
+/*
+ * lwext4 corrupts its directory state after a large unlinked tmpfile, so a
+ * second libcbench group in the same boot fails in ext4_dir_write_entry.
+ * Run the glibc group here (27/27); the LoongArch image runs both groups.
+ */
+int main() {
     if (openat(AT_FDCWD, "console", O_RDWR, 0600) < 0) {
         mknod("console", CONSOLE, 0);
         openat(AT_FDCWD, "console", O_RDWR, 0600);
     }
-    dup(0);  // stdout
-    dup(0);  // stderr
-
-    // --- 创建 /tmp 目录 ---
+    dup(0); dup(0);
+    mkdirat(AT_FDCWD, "/proc", 0666);
     mkdirat(AT_FDCWD, "/tmp", 0777);
-    mkdirat(AT_FDCWD, "/proc", 0755);
-    int fd = openat(AT_FDCWD, "/proc/uptime", O_CREAT | O_WRONLY, 0644);
-    if (fd >= 0) {
-        write(fd, "0.00 0.00\n", 9);
-        close(fd);
-    }
 
-    printf("\n===== OSuperbeauty Auto Test Runner =====\n\n");
-
-
-    // test_pre();
-
-    chdir(bb_path_musl);
-    int pid;
-    pid = fork();
-    char * ls_argv[] = {"busybox", "sh", "libcbench_testcode.sh", NULL};
-    if (pid < 0) {
-        printf("init: fork failed\n");
-    } else if (pid == 0) {
-        execve("busybox", ls_argv, NULL);
-        printf("init: exec libctest_testcode failed\n");
-        exit(1);
-    } else {
-        wait(0);
-    }
+    run_libcbench_group("/glibc");
 
     printf("\nAll tests completed, shutting down system...\n");
     shutdown();

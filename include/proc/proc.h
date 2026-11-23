@@ -215,3 +215,13 @@ struct proc {
     struct sig_handlers *sig_handlers;  // Signal handler table
     struct sig_context *sig_context;    // Signal handling context stack
 };
+
+/*
+ * All threads of a group share one address space, hence one VMA table.
+ * The leader owns it; threads must look at the leader's table so that a
+ * mapping created after a thread was cloned is still visible to it.
+ */
+static inline struct proc *proc_vma_owner(struct proc *p) {
+    if (p && p->tg_shared && p->leader && p->leader->state != UNUSED) return p->leader;
+    return p;
+}

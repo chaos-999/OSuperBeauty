@@ -54,6 +54,7 @@
 #define SYS_munmap 215
 #define SYS_mremap 216
 #define SYS_clone 220
+#define SYS_clone3 435
 #define SYS_execve 221
 #define SYS_mmap 222
 #define SYS_mprotect 226

@@ -373,40 +373,30 @@ void test_on_site() {
 }
 #endif
 
+static void run_libcbench_group(const char *dir) {
+    chdir(dir);
+    int pid = fork();
+    if (pid == 0) {
+        char *av[] = {"busybox", "sh", "libcbench_testcode.sh", 0};
+        execve("busybox", av, 0);
+        exit(1);
+    }
+    if (pid > 0) wait(0);
+}
+
 int main() {
     if (openat(AT_FDCWD, "console", O_RDWR, 0600) < 0) {
         mknod("console", CONSOLE, 0);
         openat(AT_FDCWD, "console", O_RDWR, 0600);
     }
-    dup(0);  // stdout
-    dup(0);  // stderr
-
+    dup(0); dup(0);
     mkdirat(AT_FDCWD, "/proc", 0666);
     mkdirat(AT_FDCWD, "/tmp", 0777);
 
-    // basic测试：直接执行 basic 测试二进制
-    test_pre();
+    run_libcbench_group("/musl");
+    run_libcbench_group("/glibc");
 
-    // int pid;
-    // chdir(bb_path_musl);
-    // // printf("#### OS COMP TEST GROUP START busybox-musl ####\n");
-    // pid = fork();
-    // if (pid < 0) {
-    //     printf("init: fork failed\n");
-    // } else if (pid == 0) {
-    //     execve("busybox", libctest_testcode, NULL);
-    //     printf("init: exec libctest_testcode failed\n");
-    //     exit(1);
-    // } else {
-    //     wait(0);
-    // }
-
-    // interrupt / copy-file-range / splice 测试
-    //test_final();
-
-    // test_on_site();  // busybox/git 依赖未就绪，详见上方 #if 0
-
-    printf("All tests completed, shutting down system...\n");
+    printf("\nAll tests completed, shutting down system...\n");
     shutdown();
     return 0;
 }

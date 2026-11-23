@@ -522,6 +522,14 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
 
     // CLONE_SIGHAND: share signal handler table (increment refcount)
     if (flags & CLONE_SIGHAND) {
+        /*
+         * allocproc() called sig_init(np), which allocated a private table
+         * with refcount 1.  Replacing the pointer with the parent's shared
+         * table without releasing it leaked one page per thread (2500
+         * threads per libcbench pthread test!).  Drop the private table
+         * first; its refcount is 1 so sig_cleanup() frees it.
+         */
+        sig_cleanup(np);
         acquire(&p->sig_handlers->lock);
         p->sig_handlers->refcount++;
         release(&p->sig_handlers->lock);
@@ -558,17 +566,19 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
         }
     }
 
-    for (i = 0; i < NVMA; ++i) {
-        if (p->vmas[i].valid) {
-            if (!(flags & CLONE_VM)) {
-                memmove(&np->vmas[i], &p->vmas[i], sizeof(p->vmas[i]));
-                if (p->vmas[i].f != NULL) {
-                    get_fops()->dup(p->vmas[i].f);
-                }
-            } else {
-                np->vmas[i] = p->vmas[i];
-                if (p->vmas[i].f != NULL) {
-                    get_fops()->dup(p->vmas[i].f);
+    /*
+     * CLONE_THREAD children share the leader's address space and therefore
+     * its VMA table; copying it would hide mappings created after the clone.
+     * Non-thread children (fork/clone without CLONE_THREAD) get their own
+     * table, with file references duplicated.
+     */
+    if (!(flags & CLONE_THREAD)) {
+        struct proc *vo = proc_vma_owner(p);
+        for (i = 0; i < NVMA; ++i) {
+            if (vo->vmas[i].valid) {
+                np->vmas[i] = vo->vmas[i];
+                if (vo->vmas[i].f != NULL) {
+                    get_fops()->dup(vo->vmas[i].f);
                 }
             }
         }

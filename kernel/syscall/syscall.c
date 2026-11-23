@@ -101,6 +101,7 @@ extern uint64 sys_umount2(void);
 extern uint64 sys_shutdown(void);
 extern uint64 sys_brk(void);
 extern uint64 sys_clone(void);
+extern uint64 sys_clone3(void);
 extern uint64 sys_gettimeofday(void);
 extern uint64 sys_nanosleep(void);
 extern uint64 sys_wait4(void);
@@ -195,6 +196,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_shutdown] sys_shutdown,
     [SYS_brk] sys_brk,
     [SYS_clone] sys_clone,
+    [SYS_clone3] sys_clone3,
     [SYS_gettimeofday] sys_gettimeofday,
     [SYS_nanosleep] sys_nanosleep,
     [SYS_wait4] sys_wait4,

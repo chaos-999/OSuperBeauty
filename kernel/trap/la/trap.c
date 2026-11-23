@@ -42,6 +42,7 @@ void trapinit(void) {
 }
 
 struct vma *findvma(struct proc *p, uint64 va) {
+    p = proc_vma_owner(p);
     for (int i = 0; i < NVMA; i++) {
         struct vma *vv = &p->vmas[i];
         if (vv->valid == 1 && va >= vv->addr && va < vv->addr + vv->length) {

@@ -234,6 +234,15 @@ uint64 sys_brk(void) {
     return n;
 }
 
+/*
+ * clone3 is not implemented; returning -ENOSYS makes glibc fall back to the
+ * classic clone syscall.  Registering the number keeps the dispatcher from
+ * printing an "unknown sys call 435" line on every probe.
+ */
+uint64 sys_clone3(void) {
+    return -ENOSYS;
+}
+
 int sys_clone(void) {
     int flags;
     uint64 stack, tls, ctid, ptid;
@@ -379,6 +388,7 @@ uint64 sys_uname(void) {
 
 // Find VMA by address
 static int find_vma_by_addr(struct proc *p, uint64 addr) {
+    p = proc_vma_owner(p);
     for (int i = 0; i < NVMA; i++) {
         if (p->vmas[i].valid && p->vmas[i].addr <= addr &&
             addr < p->vmas[i].addr + p->vmas[i].length) {
@@ -441,14 +451,15 @@ uint64 sys_mmap(void) {
     sz = PGROUNDUP(sz);
 
     struct proc *p = myproc();
+    struct proc *vo = proc_vma_owner(p);
     struct vma *v = 0;
     uint64 vaend = MMAPEND;
 
     for (int i = 0; i < NVMA; i++) {
-        struct vma *vv = &p->vmas[i];
+        struct vma *vv = &vo->vmas[i];
         if (!vv->valid) {
             if (!v) {
-                v = &p->vmas[i];
+                v = &vo->vmas[i];
                 v->valid = 1;
             }
         } else if (vv->addr < vaend) {
@@ -464,6 +475,19 @@ uint64 sys_mmap(void) {
     v->flags = flags;
     v->f = f;
     v->offset = offset;
+
+#ifdef LOONGARCH
+    /*
+     * LoongArch walks the page table in the TLB-refill exception handler.
+     * If an intermediate level is missing the handler cannot turn the miss
+     * into a normal page fault and the guest spins in the refill path.
+     * Pre-create the page-table levels (not the data pages) for the mapping
+     * so lazily touched pages fault into usertrap() as intended.
+     */
+    for (uint64 a = v->addr; a < v->addr + sz; a += 2 * 1024 * 1024)
+        walk(p->pagetable, a, 1);
+    walk(p->pagetable, v->addr + sz - PGSIZE, 1);
+#endif
 
     if (f != NULL) {
         get_fops()->dup(v->f);
@@ -1619,12 +1643,15 @@ uint64 sys_mprotect(void) {
         *pte |= PTE_U;
     }
 
-    for (int i = 0; i < NVMA; i++) {
-        struct vma *v = &p->vmas[i];
-        if (!v->valid) continue;
-        if (addr >= v->addr && addr + len <= v->addr + v->length) {
-            v->prot = prot;
-            break;
+    {
+        struct proc *vo = proc_vma_owner(p);
+        for (int i = 0; i < NVMA; i++) {
+            struct vma *v = &vo->vmas[i];
+            if (!v->valid) continue;
+            if (addr >= v->addr && addr + len <= v->addr + v->length) {
+                v->prot = prot;
+                break;
+            }
         }
     }
 
@@ -1641,24 +1668,28 @@ uint64 sys_mprotect(void) {
 
 uint64 sys_futex(void) {
     uint64 uaddr;
-    int op, val;
+    int op, val, val3 = 0;
 
-    // Get arguments: futex(uaddr, op, val, timeout, uaddr2, val3)
+    // futex(uaddr, op, val, timeout, uaddr2, val3)
     argaddr(0, &uaddr);
     argint(1, &op);
     argint(2, &val);
-    // We ignore timeout, uaddr2, val3 for basic implementation
+    argint(5, &val3);  // bitset for WAIT_BITSET / WAKE_BITSET
 
-    // Extract actual operation (remove private flag)
-    op = op & 0xF;
+    // Strip FUTEX_PRIVATE_FLAG (128) and FUTEX_CLOCK_REALTIME (256)
+    op = op & 0x7F;
 
     switch (op) {
         case FUTEX_WAIT:
             return futex_wait(uaddr, (uint32)val);
         case FUTEX_WAKE:
             return futex_wake(uaddr, val);
+        case FUTEX_WAIT_BITSET:
+            return futex_wait_bitset(uaddr, (uint32)val, (uint32)val3);
+        case FUTEX_WAKE_BITSET:
+            return futex_wake_bitset(uaddr, val, (uint32)val3);
         default:
-            return -ENOSYS;  // ENOSYS equivalent
+            return -ENOSYS;
     }
 }
 
