@@ -65,6 +65,24 @@ int vmatrylazytouch(uint64 va) {
     }
     // printf("here2\n");
 
+    /*
+     * If the page is already present but the access still faulted, the
+     * permission bits are stale (a fixed/overlapping mapping or a partial
+     * mprotect).  Upgrade the PTE from the current VMA instead of remapping.
+     */
+    {
+        uint64 va_aligned = PGROUNDDOWN(va);
+        pte_t *pte = walk(p->pagetable, va_aligned, 0);
+        if (pte && (*pte & PTE_V)) {
+            if (v->prot & PROT_READ) *pte |= PTE_R;
+            if (v->prot & PROT_WRITE) *pte |= PTE_W;
+            if (v->prot & PROT_EXEC) *pte |= PTE_X;
+            *pte |= PTE_U;
+            sfence_vma();
+            return 1;
+        }
+    }
+
     void *pa = kalloc();
     if (pa == NULL) panic("vmalazytouch : kalloc");
     memset(pa, 0, PGSIZE);

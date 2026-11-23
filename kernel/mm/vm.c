@@ -308,93 +308,29 @@ pagetable_t uvmcreate() {
 // for the very first process.
 // sz must be less than a page.
 void uvmfirst(pagetable_t pagetable, uchar *src, uint sz) {
+    if (sz > INIT_STACK_TOP - PGSIZE) panic("uvmfirst: initcode too large");
+    printf("sz: %d\n", sz);
+    for (int i = 0; i < INIT_PAGES; i++) {
+        char *mem = kalloc();
+        if (mem == 0) panic("uvmfirst: kalloc");
+        memset(mem, 0, PGSIZE);
+        uint64 va = (uint64)i * PGSIZE;
 #ifdef RISCV
-    char *mem;
-
-    printf("sz: %d\n", sz);
-    // if(sz >= PGSIZE)
-    //   panic("uvmfirst: more than a page");
-    mem = kalloc();
-    memset(mem, 0, PGSIZE);
-    mappages(pagetable, 0, PGSIZE, (uint64)mem, PTE_W | PTE_R | PTE_X | PTE_U);
-    memmove(mem, src, MIN(sz, PGSIZE));
-
-    mem = kalloc();
-    memset(mem, 0, PGSIZE);
-    mappages(pagetable, PGSIZE, PGSIZE, (uint64)mem, PTE_W | PTE_R | PTE_X | PTE_U);
-    if (sz > PGSIZE) {
-        memmove(mem, (uchar *)((uint64)src + PGSIZE), MIN(sz - PGSIZE, PGSIZE));
-    }
-
-    mem = kalloc();
-    memset(mem, 0, PGSIZE);
-    mappages(pagetable, 2 * PGSIZE, PGSIZE, (uint64)mem, PTE_W | PTE_R | PTE_X | PTE_U);
-    if (sz > 2 * PGSIZE) {
-        memmove(mem, (uchar *)((uint64)src + 2 * PGSIZE), MIN(sz - 2 * PGSIZE, PGSIZE));
-    }
-
-    /*
-     * The initial user stack top is 4 * PGSIZE, so page 3 is always used as
-     * stack even when initcode itself is smaller than 8 KiB.  Map it
-     * unconditionally; otherwise the first push at sp-8 faults.
-     */
-    mem = kalloc();
-    memset(mem, 0, PGSIZE);
-    mappages(pagetable, 3 * PGSIZE, PGSIZE, (uint64)mem, PTE_W | PTE_R | PTE_X | PTE_U);
-    if (sz > 3 * PGSIZE) {
-        memmove(mem, (uchar *)((uint64)src + 3 * PGSIZE), MIN(sz - 3 * PGSIZE, PGSIZE));
-    }
+        int perm = PTE_W | PTE_R | PTE_X | PTE_U;
 #elif defined(LOONGARCH)
-    char *mem;
-    printf("sz: %d\n", sz);
-    // if(sz >= PGSIZE)
-    //   panic("uvmfirst: more than a page");
-    mem = kalloc();
-    memset(mem, 0, PGSIZE);
-    // LA2K1000: 用户首页需带 PTE_U，其它 LA 平台保持原样
 #ifdef LA2K1000
-    mappages(pagetable, 0, PGSIZE, (uint64)mem, PTE_W | PTE_MAT | PTE_PLV | PTE_D | PTE_P | PTE_U);
+        int perm = PTE_W | PTE_MAT | PTE_PLV | PTE_D | PTE_P | PTE_U;
 #else
-    mappages(pagetable, 0, PGSIZE, (uint64)mem, PTE_W | PTE_MAT | PTE_PLV | PTE_D | PTE_P);
+        int perm = PTE_W | PTE_MAT | PTE_PLV | PTE_D | PTE_P;
 #endif
-    memmove(mem, src, MIN(sz, PGSIZE));
-
-    mem = kalloc();
-    memset(mem, 0, PGSIZE);
-#ifdef LA2K1000
-    mappages(pagetable, PGSIZE, PGSIZE, (uint64)mem,
-             PTE_W | PTE_MAT | PTE_PLV | PTE_D | PTE_P | PTE_U);
-#else
-    mappages(pagetable, PGSIZE, PGSIZE, (uint64)mem, PTE_W | PTE_MAT | PTE_PLV | PTE_D | PTE_P);
 #endif
-    if (sz > PGSIZE) {
-        memmove(mem, (uchar *)((uint64)src + PGSIZE), MIN(sz - PGSIZE, PGSIZE));
+        if (mappages(pagetable, va, PGSIZE, (uint64)mem, perm) != 0)
+            panic("uvmfirst: mappages");
+        if (va < sz) {
+            uint64 n = MIN((uint64)sz - va, (uint64)PGSIZE);
+            memmove(mem, src + va, n);
+        }
     }
-
-    mem = kalloc();
-    memset(mem, 0, PGSIZE);
-#ifdef LA2K1000
-    mappages(pagetable, 2 * PGSIZE, PGSIZE, (uint64)mem,
-             PTE_W | PTE_MAT | PTE_PLV | PTE_D | PTE_P | PTE_U);
-#else
-    mappages(pagetable, 2 * PGSIZE, PGSIZE, (uint64)mem, PTE_W | PTE_MAT | PTE_PLV | PTE_D | PTE_P);
-#endif
-    if (sz > 2 * PGSIZE) {
-        memmove(mem, (uchar *)((uint64)src + 2 * PGSIZE), MIN(sz - 2 * PGSIZE, PGSIZE));
-    }
-
-    mem = kalloc();
-    memset(mem, 0, PGSIZE);
-#ifdef LA2K1000
-    mappages(pagetable, 3 * PGSIZE, PGSIZE, (uint64)mem,
-             PTE_W | PTE_MAT | PTE_PLV | PTE_D | PTE_P | PTE_U);
-#else
-    mappages(pagetable, 3 * PGSIZE, PGSIZE, (uint64)mem, PTE_W | PTE_MAT | PTE_PLV | PTE_D | PTE_P);
-#endif
-    if (sz > 3 * PGSIZE) {
-        memmove(mem, (uchar *)((uint64)src + 3 * PGSIZE), MIN(sz - 3 * PGSIZE, PGSIZE));
-    }
-#endif
 }
 
 // Allocate PTEs and physical memory to grow process from oldsz to

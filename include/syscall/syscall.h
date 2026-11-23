@@ -104,3 +104,19 @@
 #define SYS_fdatasync 83
 #define SYS_fchownat 54
 #define SYS_fchown 666
+
+// Small compatibility syscalls (asm-generic numbers, used by LTP)
+#define SYS_preadv 69
+#define SYS_pwritev 70
+#define SYS_personality 92
+#define SYS_sched_setaffinity 122
+#define SYS_sched_getaffinity 123
+#define SYS_getrusage 165
+#define SYS_prctl 167
+#define SYS_mlock 228
+#define SYS_munlock 229
+#define SYS_mlockall 230
+#define SYS_munlockall 231
+#define SYS_membarrier 283
+#define SYS_rseq 293
+#define SYS_faccessat2 439

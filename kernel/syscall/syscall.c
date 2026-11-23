@@ -150,6 +150,19 @@ extern uint64 sys_readv(void);
 extern uint64 sys_lseek(void);
 extern uint64 sys_renameat2(void);
 extern uint64 sys_madvise(void);
+extern uint64 sys_preadv(void);
+extern uint64 sys_pwritev(void);
+extern uint64 sys_personality(void);
+extern uint64 sys_sched_setaffinity(void);
+extern uint64 sys_sched_getaffinity(void);
+extern uint64 sys_getrusage(void);
+extern uint64 sys_prctl(void);
+extern uint64 sys_mlock(void);
+extern uint64 sys_munlock(void);
+extern uint64 sys_mlockall(void);
+extern uint64 sys_munlockall(void);
+extern uint64 sys_membarrier(void);
+extern uint64 sys_rseq(void);
 extern uint64 sys_mremap(void);
 extern uint64 sys_mprotect(void);
 extern uint64 sys_futex(void);
@@ -258,6 +271,20 @@ static uint64 (*syscalls[])(void) = {
     [SYS_symlinkat] sys_symlinkat,
     [SYS_fsync] sys_fsync,
     [SYS_fdatasync] sys_fdatasync,
+[SYS_preadv] sys_preadv,
+    [SYS_pwritev] sys_pwritev,
+    [SYS_personality] sys_personality,
+    [SYS_sched_setaffinity] sys_sched_setaffinity,
+    [SYS_sched_getaffinity] sys_sched_getaffinity,
+    [SYS_getrusage] sys_getrusage,
+    [SYS_prctl] sys_prctl,
+    [SYS_mlock] sys_mlock,
+    [SYS_munlock] sys_munlock,
+    [SYS_mlockall] sys_mlockall,
+    [SYS_munlockall] sys_munlockall,
+    [SYS_membarrier] sys_membarrier,
+    [SYS_rseq] sys_rseq,
+    [SYS_faccessat2] sys_faccessat,
 };
 
 void syscall(void) {

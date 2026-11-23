@@ -1345,3 +1345,55 @@ uint64 sys_fchownat(void) {
     argint(4, &flags);
     return 0;
 }
+
+uint64 sys_preadv(void) {
+    struct file *f;
+    uint64 iov_addr, off;
+    int iovcnt, n;
+    struct iovec iov[64];
+    uint64 total = 0, cur;
+
+    if (argfd(0, 0, &f) < 0) return -1;
+    argaddr(1, &iov_addr);
+    argint(2, &iovcnt);
+    argaddr(3, &off);
+    if (iovcnt <= 0 || iovcnt > 64) return -EINVAL;
+    if (copyin(myproc()->pagetable, (char *)iov, iov_addr, sizeof(struct iovec) * iovcnt) < 0)
+        return -EFAULT;
+    cur = off;
+    for (int i = 0; i < iovcnt; i++) {
+        if (iov[i].iov_len == 0) continue;
+        n = get_fops()->readat(f, (uint64)iov[i].iov_base, iov[i].iov_len, cur);
+        if (n < 0) return n;
+        total += n;
+        cur += n;
+        if ((uint64)n < iov[i].iov_len) break;
+    }
+    return total;
+}
+
+uint64 sys_pwritev(void) {
+    struct file *f;
+    uint64 iov_addr, off;
+    int iovcnt, n;
+    struct iovec iov[64];
+    uint64 total = 0, cur;
+
+    if (argfd(0, 0, &f) < 0) return -1;
+    argaddr(1, &iov_addr);
+    argint(2, &iovcnt);
+    argaddr(3, &off);
+    if (iovcnt <= 0 || iovcnt > 64) return -EINVAL;
+    if (copyin(myproc()->pagetable, (char *)iov, iov_addr, sizeof(struct iovec) * iovcnt) < 0)
+        return -EFAULT;
+    cur = off;
+    for (int i = 0; i < iovcnt; i++) {
+        if (iov[i].iov_len == 0) continue;
+        n = get_fops()->writeat(f, (uint64)iov[i].iov_base, iov[i].iov_len, cur);
+        if (n < 0) return n;
+        total += n;
+        cur += n;
+        if ((uint64)n < iov[i].iov_len) break;
+    }
+    return total;
+}

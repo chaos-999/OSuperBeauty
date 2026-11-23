@@ -58,6 +58,7 @@
 | `52-libcbench-kernel-requirements.md` | 📋 libcbench 内核功能需求 ↔ 原实现 ↔ 本次修改逐项对照（含代码） | 2026-11-18 |
 | `53-libcbench-official-eval-fixes.md` | 🔧 官方评测修复：glibc futex/BITSET、clone3、LA 页表预创建、线程组 VMA 共享、信号表泄漏、buddy 幻影尾部；lwext4 目录项修复后 RV/LA 各跑两组，judge 汇总 116.268 | 2026-11-23 |
 | `54-libcbench-performance-and-official-score.md` | ⚡ 性能修复：块设备 BSIZE=4096、VMA 高水位扫描、clone 只清理用到的 VMA 槽、Makefile 子目录 `.d` 依赖；官方 docker harness `Accpted` score **115.5–116.1**（RV 30.6+27.3，LA 28.8+28.9），整体运行时间 ~22min→~6min | 2026-11-23 |
+| `55-ltp-dynamic-loader-blocker.md` | 🧪 LTP 可行性排查：运行框架/判分格式已确认；阻塞点是镜像 LTP 二进制为动态链接，需补齐动态 ELF loader 语义（MAP_FIXED 等已实现）；libcbench 仍 115.5–116.1 | 2026-11-24 |
 
 ## 勘误与错误方向标记
 

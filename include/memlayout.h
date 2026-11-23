@@ -1,4 +1,11 @@
 #pragma once
+
+// Initial process (the embedded init binary) layout.  The init code can be
+// larger than a few pages (the LTP test list alone is several KB), so map a
+// fixed region and put the initial user stack at its top; otherwise the stack
+// overlaps the binary image and corrupts it.
+#define INIT_PAGES 32
+#define INIT_STACK_TOP ((uint64)INIT_PAGES * PGSIZE)
 // Physical memory layout
 
 // qemu -machine virt is set up like this,

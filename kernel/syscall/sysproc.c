@@ -398,6 +398,47 @@ static int find_vma_by_addr(struct proc *p, uint64 addr) {
     return -1;
 }
 
+/*
+ * Drop/replace every mapping that overlaps [addr, addr+sz).  The dynamic
+ * loader reserves a range and then maps the ELF segments over it with
+ * MAP_FIXED; support that by trimming or removing the old VMAs and
+ * unmapping their pages.
+ */
+static void mmap_replace_range(struct proc *vo, pagetable_t pt, uint64 addr, uint64 sz) {
+    uint64 end = addr + sz;
+    for (int i = 0; i < vo->vma_n; i++) {
+        struct vma *v = &vo->vmas[i];
+        if (!v->valid) continue;
+        uint64 vs = v->addr, ve = v->addr + v->length;
+        if (ve <= addr || vs >= end) continue;
+        uint64 s = vs > addr ? vs : addr;
+        uint64 e = ve < end ? ve : end;
+        vmaunmap(pt, s, e - s, v);
+        if (s == vs && e == ve) {
+            if (v->f) get_fops()->close(v->f);
+            v->valid = 0;
+        } else if (s == vs) {
+            v->offset += e - s;
+            v->addr = e;
+            v->length = ve - e;
+        } else if (e == ve) {
+            v->length = s - vs;
+        } else {
+            /* hole in the middle: keep the head and copy the tail */
+            if (vo->vma_n < NVMA) {
+                struct vma *nv = &vo->vmas[vo->vma_n++];
+                *nv = *v;
+                nv->addr = e;
+                nv->offset = v->offset + (e - vs);
+                nv->length = ve - e;
+                if (nv->f) get_fops()->dup(nv->f);
+            }
+            v->length = s - vs;
+        }
+    }
+    while (vo->vma_n > 0 && !vo->vmas[vo->vma_n - 1].valid) vo->vma_n--;
+}
+
 uint64 sys_mmap(void) {
     uint64 addr, sz, offset;
     int prot, flags, fd;
@@ -411,17 +452,12 @@ uint64 sys_mmap(void) {
     argint(4, &fd);
     argaddr(5, &offset);
 
+
     if (strcmp(myproc()->name, "git") == 0) {
         // printf("DEBUG: sys_mmap ENTER pid=%d addr=%lx sz=%lx prot=0x%x flags=0x%x fd=%d
         // off=%lx\n", myproc()->pid, addr, sz, prot, flags, fd, offset);
     }
 
-    if (flags & MAP_FIXED) {
-        if (strcmp(myproc()->name, "git") == 0) {
-            // printf("DEBUG: sys_mmap reject MAP_FIXED\n");
-        }
-        return -EINVAL;
-    }
 
     if (sz == 0) {
         sz_zero = 1;
@@ -454,12 +490,26 @@ uint64 sys_mmap(void) {
     struct proc *vo = proc_vma_owner(p);
     struct vma *v = 0;
     uint64 vaend = MMAPEND;
+    int fixed = (flags & MAP_FIXED) != 0;
+
+    if (fixed) {
+        addr = PGROUNDDOWN(addr);
+        /*
+         * The mmap area is [USTACK_TOP, MMAPEND); only reject ranges outside
+         * user space or overlapping the fixed user stack.
+         */
+        if (addr < PGSIZE || addr + sz > MMAPEND || addr + sz < addr ||
+            (addr < USTACK_TOP && addr + sz > USTACK)) {
+            return -EINVAL;
+        }
+        mmap_replace_range(vo, p->pagetable, addr, sz);
+    }
 
     for (int i = 0; i < vo->vma_n; i++) {
         struct vma *vv = &vo->vmas[i];
         if (!vv->valid) {
             if (!v) v = vv;
-        } else if (vv->addr < vaend) {
+        } else if (!fixed && vv->addr < vaend) {
             vaend = PGROUNDDOWN(vv->addr);
         }
     }
@@ -470,7 +520,7 @@ uint64 sys_mmap(void) {
     }
     v->valid = 1;
 
-    v->addr = vaend - sz;
+    v->addr = fixed ? addr : vaend - sz;
     v->length = sz;
     v->prot = prot;
     v->flags = flags;
@@ -1655,9 +1705,9 @@ uint64 sys_mprotect(void) {
         for (int i = 0; i < vo->vma_n; i++) {
             struct vma *v = &vo->vmas[i];
             if (!v->valid) continue;
-            if (addr >= v->addr && addr + len <= v->addr + v->length) {
+            /* Update every overlapping VMA (a partial mprotect is allowed). */
+            if (addr < v->addr + v->length && addr + len > v->addr) {
                 v->prot = prot;
-                break;
             }
         }
     }
@@ -1871,3 +1921,142 @@ void backtrace(void) {
     }
 }
 #endif
+
+/* ---------------- small compatibility syscalls for LTP ---------------- */
+
+uint64 sys_prctl(void) {
+    int option;
+    uint64 a2 = 0, a3 = 0, a4 = 0, a5 = 0;
+    argint(0, &option);
+    argaddr(1, &a2);
+    argaddr(2, &a3);
+    argaddr(3, &a4);
+    argaddr(4, &a5);
+    struct proc *p = myproc();
+    switch (option) {
+        case 15: { /* PR_SET_NAME */
+            char name[16];
+            if (copyinstr(p->pagetable, name, a2, sizeof(name)) < 0) return -EFAULT;
+            safestrcpy(p->name, name, sizeof(p->name));
+            return 0;
+        }
+        case 16: { /* PR_GET_NAME */
+            char name[16];
+            int n;
+            memset(name, 0, sizeof(name));
+            n = strlen(p->name);
+            if (n > 15) n = 15;
+            memmove(name, p->name, n);
+            if (copyout(p->pagetable, a2, name, sizeof(name)) < 0) return -EFAULT;
+            return 0;
+        }
+        case 1:  /* PR_SET_PDEATHSIG */
+        case 4:  /* PR_SET_DUMPABLE */
+        case 36: /* PR_SET_CHILD_SUBREAPER */
+        case 38: /* PR_SET_NO_NEW_PRIVS */
+            return 0;
+        case 2: { /* PR_GET_PDEATHSIG */
+            int v = 0;
+            if (copyout(p->pagetable, a2, (char *)&v, sizeof(v)) < 0) return -EFAULT;
+            return 0;
+        }
+        case 3: { /* PR_GET_DUMPABLE */
+            int v = 1;
+            if (copyout(p->pagetable, a2, (char *)&v, sizeof(v)) < 0) return -EFAULT;
+            return 0;
+        }
+        case 37: { /* PR_GET_CHILD_SUBREAPER */
+            int v = 0;
+            if (copyout(p->pagetable, a2, (char *)&v, sizeof(v)) < 0) return -EFAULT;
+            return 0;
+        }
+        case 39: { /* PR_GET_NO_NEW_PRIVS */
+            int v = 1;
+            if (copyout(p->pagetable, a2, (char *)&v, sizeof(v)) < 0) return -EFAULT;
+            return 0;
+        }
+        default:
+            return -EINVAL;
+    }
+}
+
+uint64 sys_getrusage(void) {
+    int who;
+    uint64 addr;
+    char ru[144];
+    argint(0, &who);
+    argaddr(1, &addr);
+    if (who != 0 && who != 1 && who != -1) return -EINVAL;
+    memset(ru, 0, sizeof(ru));
+    if (copyout(myproc()->pagetable, addr, ru, sizeof(ru)) < 0) return -EFAULT;
+    return 0;
+}
+
+uint64 sys_sched_setaffinity(void) {
+    int pid, len;
+    uint64 mask;
+    char buf[256];
+    int n;
+    argint(0, &pid);
+    argint(1, &len);
+    argaddr(2, &mask);
+    if (len <= 0) return -EINVAL;
+    n = len > (int)sizeof(buf) ? (int)sizeof(buf) : len;
+    if (copyin(myproc()->pagetable, buf, mask, n) < 0) return -EFAULT;
+    return 0;
+}
+
+uint64 sys_sched_getaffinity(void) {
+    int pid, len;
+    uint64 mask;
+    char buf[256];
+    int n;
+    argint(0, &pid);
+    argint(1, &len);
+    argaddr(2, &mask);
+    if (len <= 0) return -EINVAL;
+    memset(buf, 0, sizeof(buf));
+    buf[0] = 1; /* CPU 0 only */
+    n = len > (int)sizeof(buf) ? (int)sizeof(buf) : len;
+    if (copyout(myproc()->pagetable, mask, buf, n) < 0) return -EFAULT;
+    return 0;
+}
+
+uint64 sys_personality(void) {
+    uint64 persona;
+    argaddr(0, &persona);
+    return 0;
+}
+
+uint64 sys_mlock(void) {
+    uint64 addr, len;
+    argaddr(0, &addr);
+    argaddr(1, &len);
+    return 0;
+}
+
+uint64 sys_munlock(void) {
+    uint64 addr, len;
+    argaddr(0, &addr);
+    argaddr(1, &len);
+    return 0;
+}
+
+uint64 sys_mlockall(void) {
+    int flags;
+    argint(0, &flags);
+    return 0;
+}
+
+uint64 sys_munlockall(void) { return 0; }
+
+uint64 sys_membarrier(void) {
+    int cmd, flags;
+    argint(0, &cmd);
+    argint(1, &flags);
+    if (cmd == 0) return 121; /* MEMBARRIER_CMD_QUERY: advertise common commands */
+    if (flags != 0) return -EINVAL;
+    return 0;
+}
+
+uint64 sys_rseq(void) { return 0; }
