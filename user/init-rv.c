@@ -287,6 +287,7 @@ int main() {
     mkdirat(AT_FDCWD, "/tmp", 0777);
 
     run_libcbench_group("/glibc");
+    run_libcbench_group("/musl");
 
     printf("\nAll tests completed, shutting down system...\n");
     shutdown();

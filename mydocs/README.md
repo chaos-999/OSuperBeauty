@@ -56,7 +56,7 @@
 | `50-dev-zero-read-syscall-sign-extend-fix.md` | 🔧 `/dev/zero` read 修复：返回 `n` 个零字节而非 EOF，修复 libc-test `syscall_sign_extend` 假 PASS（PR #3，已按本仓库情况调整） | 2026-11-17 |
 | `51-libcbench-all-pass.md` | 🔧 libcbench 27 项全通过：clone ABI、共享页表 TRAPFRAME、set_tid_address、brk/exit_group、NVMA/用户栈、fstat 的完整修复链 | 2026-11-18 |
 | `52-libcbench-kernel-requirements.md` | 📋 libcbench 内核功能需求 ↔ 原实现 ↔ 本次修改逐项对照（含代码） | 2026-11-18 |
-| `53-libcbench-official-eval-fixes.md` | 🔧 官方评测修复：glibc futex/BITSET、clone3、LA 页表预创建、线程组 VMA 共享、信号表泄漏、buddy 幻影尾部；RV glibc + LA 双组最终配置，judge 汇总 89.035 | 2026-11-23 |
+| `53-libcbench-official-eval-fixes.md` | 🔧 官方评测修复：glibc futex/BITSET、clone3、LA 页表预创建、线程组 VMA 共享、信号表泄漏、buddy 幻影尾部；lwext4 目录项修复后 RV/LA 各跑两组，judge 汇总 116.268 | 2026-11-23 |
 
 ## 勘误与错误方向标记
 

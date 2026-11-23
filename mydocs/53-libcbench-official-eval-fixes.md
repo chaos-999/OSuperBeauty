@@ -89,10 +89,9 @@ guest 在 refill 路径里循环。
 
 ---
 
-## 2. 仍存在的环境限制：lwext4 大文件 unlink 后的目录断言
+## 2. lwext4 目录项断言（已修复）
 
-在一次启动内先跑一组、再跑第二组时，第二组的 `stdio` 会在
-`ext4_dir_write_entry()` 断言：
+在一次启动内跑第二组时，原先会在 `ext4_dir_write_entry()` 断言：
 
 ```
 assertion failed:
@@ -100,65 +99,65 @@ file: kernel/fs/lwext4/ext4_dir.c
 line: 304
 ```
 
-（`entry_len <= block_size` 失败）
+根因在 `ext4_dir_try_insert_entry()`：
 
-- 单组运行（含两组 stdio、5MB tmpfile 写入/读回）均正常；
-- 独立小测试连续 4 次 5MB tmpfile 也正常；
-- 触发条件是「跨组」的 ext4 状态，属于 lwext4 目录/块组状态问题，未在本轮修复。
+```c
+uint16_t free_space = rec_len - sz;   /* sz = 8 + name_len */
+```
 
-**规避**：RV 的 init 先跑 glibc 组（完整 27 项），再给 musl 组 300 秒窗口；
-musl 组在 stdio 前已完成 22 项，watchdog 到点直接 shutdown，
-不让整机挂死。LA 上两组都能完整跑完（LA musl/glibc 均为 27/27）。
+`tmpfile()` 创建后立刻 unlink、再写 5MB、close；两次之后，目录项的
+rec_len 被 remove_entry 合并得不再自洽，某个有效项的 `name_len` 大于
+`rec_len - 8`，`free_space` 下溢成接近 65535，随后
+`ext4_dir_write_entry()` 的 `entry_len <= block_size` 断言失败。
 
----
+修复（`kernel/fs/lwext4/ext4_dir.c`）：
+
+- 遍历目录块时校验 `rec_len >= sizeof(header)` 且 `start + rec_len <= stop`，
+  否则停止（避免 rec_len=0/越界导致死循环）；
+- 有效项若 `sz > rec_len`，视为损坏项跳过，不再做无符号下溢；
+- 找不到合适空间时返回 `ENOSPC`，由 `ext4_dir_add_entry()` 分配新的目录块。
+
+修复后 RV 单次启动中 glibc + musl 两组都能完成 27/27 并正常关机。
 
 ## 3. 最终 init 配置
 
-`user/init-rv.c`（RISC-V）：只跑 glibc 组，正常关机：
+RV 与 LA 都在一次启动内跑两组（lwext4 修复后）：
+
+`user/init-rv.c`：
 
 ```c
 run_libcbench_group("/glibc");   /* 27/27 */
+run_libcbench_group("/musl");    /* 27/27 */
 ```
 
-`user/init-la.c`（LoongArch）：两组都完整跑：
+`user/init-la.c`：
 
 ```c
 run_libcbench_group("/musl");    /* 27/27 */
 run_libcbench_group("/glibc");   /* 27/27 */
 ```
 
-**为什么 RV 不跑两组**：第二组（无论 musl 还是 glibc）的 stdio 都会在
-`ext4_dir_write_entry` 断言并挂住（见 §2）。尝试过：
-
-- 组间 `rmdir/mkdir /tmp`：无效（问题不在 /tmp 目录项）；
-- init 里用 `waitpid(WNOHANG)+clock_gettime` 轮询并在超时后 shutdown：
-  `waitpid` 在指定 pid 上没有按 WNOHANG 返回（或 wrapper 语义不符），
-  init 被阻塞，无法收尾；
-- 额外 fork 一个 watchdog 子进程计时后 `shutdown()`：
-  在部分启动中触发 `scause=0xc sepc=0`（execve 走 ext4 时跳到 0），
-  不可靠。
-
-因此采用**已验证可正常关机**的配置：RV 只跑 glibc（27/27），
-LA 跑两组（54/54）。
+每组都是 `fork → exec busybox sh <lib>_testcode.sh → wait`，
+跑完 `shutdown()`。
 
 ---
 
 ## 4. 验证结果（官方 judge 脚本逐组解析）
 
-最终内核（`kernel-rv` / `kernel-la`，含本轮全部修复）实测：
+修复后单次启动实测（`score_log.py` 直接调用 `judge_*.py`）：
 
 | 架构 | 组 | 结果 | 分数 |
 |---|---|---|---|
-| RV | libcbench-glibc | 27/27 | 31.494 |
+| RV | libcbench-musl | 27/27 | 27.247 |
+| RV | libcbench-glibc | 27/27 | 31.318 |
 | LA | libcbench-musl | 27/27 | 28.810 |
-| LA | libcbench-glibc | 27/27 | 28.731 |
-| **合计** | | **81 项** | **89.035** |
+| LA | libcbench-glibc | 27/27 | 28.893 |
+| **合计** | **108 项** | | **116.268** |
 
-- RV 运行 `done=0`，日志有 `GROUP END` 和
+- RV 日志：两组均有 `GROUP START/END`，`done=0`，
   `All tests completed, shutting down system...`；
-- LA 两组都有 `GROUP END`，`done=0`；
-- 四组**单独**运行均 27/27（RV musl 27.25、RV glibc 32.24、
-  LA musl 28.80、LA glibc 28.78）。RV 的 musl 组受 lwext4 限制未纳入最终配置。
+- LA 日志：两组均有 `GROUP END`，`done=0`；
+- 无 `assertion failed`、无 panic。
 
 ---
 
