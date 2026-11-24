@@ -120,3 +120,9 @@
 #define SYS_membarrier 283
 #define SYS_rseq 293
 #define SYS_faccessat2 439
+#define SYS_setitimer 103
+#define SYS_getitimer 102
+#define SYS_setpgid 154
+#define SYS_setsid 157
+#define SYS_umask 166
+#define SYS_msync 227

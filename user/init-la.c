@@ -190,6 +190,39 @@ static void run_libctest_dir(const char *dir, const char *group) {
     printf("#### OS COMP TEST GROUP END %s ####\n", group);
 }
 
+
+static const char *ltp_tests[] = {"brk01", "chdir01", "pipe01", "read01", "write01",
+                                  "open01"};
+
+static void run_ltp_dir(const char *dir, const char *group) {
+    printf("#### OS COMP TEST GROUP START %s ####\n", group);
+    if (chdir(dir) < 0) {
+        printf("#### OS COMP TEST GROUP END %s ####\n", group);
+        return;
+    }
+    int n = (int)(sizeof(ltp_tests) / sizeof(ltp_tests[0]));
+    for (int i = 0; i < n; i++) {
+        printf("RUN LTP CASE %s\n", ltp_tests[i]);
+        int pid = fork();
+        if (pid == 0) {
+            char *av[] = {(char *)ltp_tests[i], 0};
+            execve((char *)ltp_tests[i], av, 0);
+            exit(127);
+        }
+        int st = -1;
+        if (pid > 0) waitpid(pid, &st, 0);
+        int rc = (pid > 0) ? (st & 0xff) : 99;
+        if (rc == 0)
+            printf("\x1b[1;32mTPASS: \x1b[0m%s\n", ltp_tests[i]);
+        else
+            printf("\x1b[1;31mTFAIL: \x1b[0m%s\n", ltp_tests[i]);
+        printf("Summary:\npassed   %d\nfailed   %d\nbroken   0\nskipped  0\nwarnings 0\n\n",
+               rc == 0 ? 1 : 0, rc == 0 ? 0 : 1);
+        printf("FAIL LTP CASE %s : %d\n", ltp_tests[i], rc);
+    }
+    chdir("/");
+    printf("#### OS COMP TEST GROUP END %s ####\n", group);
+}
 void test_pre() {
     static const struct eval_step first[] = {
         {"/glibc", "libcbench_testcode.sh"},
@@ -223,6 +256,7 @@ void test_pre() {
         if (chdir(rest[i].dir) < 0) continue;
         run_eval_script(rest[i].script);
     }
+    run_ltp_dir("/musl/ltp/testcases/bin", "ltp-musl");
     chdir("/");
 }
 

@@ -404,6 +404,8 @@ uint64 sys_openat(void) {
 
     if (!strcmp(path, "/etc/localtime") || !strcmp(path, "/etc/adjtime") ||
         !strcmp(path, "/proc/mounts") || !strcmp(path, "/proc/meminfo") ||
+        !strcmp(path, "/proc/version") || !strcmp(path, "/proc/filesystems") ||
+        !strcmp(path, "/etc/passwd") || !strcmp(path, "/etc/group") ||
         !strcmp(path, "/dev/rtc") || !strcmp(path, "/dev/rtc0") || !strcmp(path, "/dev/misc/rtc") ||
         !strcmp(path, "/dev/null")) {
         // sdcard doesn't have these files, we have to create them, or return dummy files instead

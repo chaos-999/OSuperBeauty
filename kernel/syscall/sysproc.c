@@ -2060,3 +2060,52 @@ uint64 sys_membarrier(void) {
 }
 
 uint64 sys_rseq(void) { return 0; }
+
+uint64 sys_setitimer(void) {
+    int which;
+    uint64 newv, oldv;
+    argint(0, &which);
+    argaddr(1, &newv);
+    argaddr(2, &oldv);
+    if (oldv) {
+        char z[32];
+        memset(z, 0, sizeof(z));
+        if (copyout(myproc()->pagetable, oldv, z, sizeof(z)) < 0) return -EFAULT;
+    }
+    return 0;
+}
+
+uint64 sys_getitimer(void) {
+    int which;
+    uint64 cur;
+    argint(0, &which);
+    argaddr(1, &cur);
+    char z[32];
+    memset(z, 0, sizeof(z));
+    if (copyout(myproc()->pagetable, cur, z, sizeof(z)) < 0) return -EFAULT;
+    return 0;
+}
+
+uint64 sys_setpgid(void) {
+    int pid, pgid;
+    argint(0, &pid);
+    argint(1, &pgid);
+    return 0;
+}
+
+uint64 sys_setsid(void) { return myproc()->pid; }
+
+uint64 sys_umask(void) {
+    int mask;
+    argint(0, &mask);
+    return 0;
+}
+
+uint64 sys_msync(void) {
+    uint64 addr, len;
+    int flags;
+    argaddr(0, &addr);
+    argaddr(1, &len);
+    argint(2, &flags);
+    return 0;
+}

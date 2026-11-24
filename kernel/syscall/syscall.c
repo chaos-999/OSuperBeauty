@@ -157,6 +157,12 @@ extern uint64 sys_sched_setaffinity(void);
 extern uint64 sys_sched_getaffinity(void);
 extern uint64 sys_getrusage(void);
 extern uint64 sys_prctl(void);
+extern uint64 sys_setitimer(void);
+extern uint64 sys_umask(void);
+extern uint64 sys_msync(void);
+extern uint64 sys_getitimer(void);
+extern uint64 sys_setpgid(void);
+extern uint64 sys_setsid(void);
 extern uint64 sys_mlock(void);
 extern uint64 sys_munlock(void);
 extern uint64 sys_mlockall(void);
@@ -285,6 +291,12 @@ static uint64 (*syscalls[])(void) = {
     [SYS_membarrier] sys_membarrier,
     [SYS_rseq] sys_rseq,
     [SYS_faccessat2] sys_faccessat,
+[SYS_setitimer] sys_setitimer,
+    [SYS_getitimer] sys_getitimer,
+    [SYS_setpgid] sys_setpgid,
+    [SYS_umask] sys_umask,
+    [SYS_msync] sys_msync,
+    [SYS_setsid] sys_setsid,
 };
 
 void syscall(void) {
