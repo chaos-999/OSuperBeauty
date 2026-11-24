@@ -102,7 +102,7 @@ int filestat(struct file *f, uint64 addr) {
     struct proc *p = myproc();
     struct kstat st;
     // Special system files without ext4 backing
-    if (f->f_extfile == NULL) {
+    if (f->f_extfile == NULL || ((struct ext4_file *)f->f_extfile)->mp == NULL) {
         memset(&st, 0, sizeof(st));
         st.st_dev = 0;
         st.st_ino = 1;
@@ -138,7 +138,7 @@ int filestatx(struct file *f, uint64 addr) {
     struct statx sx;
     struct kstat ks;
     // Special system files without ext4 backing
-    if (f->f_extfile == NULL) {
+    if (f->f_extfile == NULL || ((struct ext4_file *)f->f_extfile)->mp == NULL) {
         memset(&sx, 0, sizeof(sx));
         sx.stx_blksize = 4096;
         sx.stx_nlink = 1;

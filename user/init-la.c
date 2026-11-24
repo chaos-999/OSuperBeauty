@@ -43,7 +43,7 @@ static void run_eval_script(const char *script) {
     int pid = fork();
     if (pid < 0) return;
     if (pid == 0) {
-        char *av[] = {"busybox", "sh", (char *)script, 0};
+        char *av[] = {"busybox", "ash", (char *)script, 0};
         execve("busybox", av, 0);
         exit(127);
     }
@@ -197,6 +197,7 @@ void test_pre() {
         {"/glibc", "busybox_testcode.sh"},
         {"/musl", "libcbench_testcode.sh"},
         {"/musl", "basic_testcode.sh"},
+        {"/musl", "busybox_testcode.sh"},
     };
     static const struct eval_step rest[] = {
         {"/glibc", "lmbench_testcode.sh"},
