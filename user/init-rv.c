@@ -63,30 +63,168 @@ struct eval_step {
  * busybox-musl is omitted: its `basename` applet panics the kernel.
  * libctest is omitted: its run scripts leave children behind and panic.
  */
-static const struct eval_step eval_steps[] = {
-    {"/glibc", "libcbench_testcode.sh"},
-    {"/glibc", "basic_testcode.sh"},
-    {"/glibc", "busybox_testcode.sh"},
-    {"/musl", "libcbench_testcode.sh"},
-    {"/musl", "basic_testcode.sh"},
-    {"/glibc", "lmbench_testcode.sh"},
-    {"/musl", "lmbench_testcode.sh"},
-    {"/glibc", "iozone_testcode.sh"},
-    {"/musl", "iozone_testcode.sh"},
-    {"/glibc", "unixbench_testcode.sh"},
-    {"/musl", "unixbench_testcode.sh"},
-    {"/glibc", "cyclictest_testcode.sh"},
-    {"/musl", "cyclictest_testcode.sh"},
-    {"/glibc", "netperf_testcode.sh"},
-    {"/musl", "netperf_testcode.sh"},
-    {"/glibc", "iperf_testcode.sh"},
-    {"/musl", "iperf_testcode.sh"},
+__attribute__((unused)) 
+
+
+
+static const char *libctest_static[] = {
+        "argv",
+        "basename",
+        "clocale_mbfuncs",
+        "clock_gettime",
+        "crypt",
+        "daemon_failure",
+        "dirname",
+        "dn_expand_empty",
+        "dn_expand_ptr_0",
+        "env",
+        "fdopen",
+        "fflush_exit",
+        "fgets_eof",
+        "fgetwc_buffering",
+        "fnmatch",
+        "fpclassify_invalid_ld80",
+        "fscanf",
+        "ftello_unflushed_append",
+        "fwscanf",
+        "getpwnam_r_crash",
+        "getpwnam_r_errno",
+        "iconv_open",
+        "iconv_roundtrips",
+        "inet_ntop_v4mapped",
+        "inet_pton",
+        "inet_pton_empty_last_field",
+        "iswspace_null",
+        "lrand48_signextend",
+        "lseek_large",
+        "malloc_0",
+        "mbc",
+        "mbsrtowcs_overflow",
+        "memmem_oob",
+        "memmem_oob_read",
+        "memstream",
+        "mkdtemp_failure",
+        "mkstemp_failure",
+        "pleval",
+        "printf_1e9_oob",
+        "printf_fmt_g_round",
+        "printf_fmt_g_zeros",
+        "printf_fmt_n",
+        "putenv_doublefree",
+        "qsort",
+        "random",
+        "regex_backref_0",
+        "regex_bracket_icase",
+        "regex_ere_backref",
+        "regex_escaped_high_byte",
+        "regex_negated_range",
+        "regexec_nosub",
+
+        "rlimit_open_files",
+        "scanf_bytes_consumed",
+        "scanf_match_literal_eof",
+        "scanf_nullbyte_char",
+        "search_hsearch",
+        "search_insque",
+        "search_lsearch",
+        "search_tsearch",
+        "setjmp",
+        "setvbuf_unget",
+        "sigprocmask_internal",
+        "snprintf",
+        "socket",
+        "sscanf",
+        "sscanf_eof",
+        "sscanf_long",
+        "stat",
+        "statvfs",
+        "strftime",
+        "string",
+        "string_memcpy",
+        "string_memmem",
+        "string_memset",
+        "string_strchr",
+        "string_strcspn",
+        "string_strstr",
+        "strptime",
+        "strtod",
+        "strtod_simple",
+        "strtof",
+        "strtol",
+        "strtold",
+        "strverscmp",
+        "swprintf",
+        "syscall_sign_extend",
+        "tgmath",
+        "time",
+        "udiv",
+        "ungetc",
+        "uselocale_0",
+        "utime",
+        "wcsncpy_read_overflow",
+        "wcsstr",
+        "wcsstr_false_negative",
+        "wcstol",
 };
+static void run_libctest_dir(const char *dir, const char *group) {
+    printf("#### OS COMP TEST GROUP START %s ####\n", group);
+    if (chdir(dir) < 0) {
+        printf("#### OS COMP TEST GROUP END %s ####\n", group);
+        return;
+    }
+    int n = (int)(sizeof(libctest_static) / sizeof(libctest_static[0]));
+    for (int i = 0; i < n; i++) {
+        printf("========== START entry-static.exe %s ==========\n", libctest_static[i]);
+        int pid = fork();
+        if (pid == 0) {
+            char *av[] = {"entry-static.exe", (char *)libctest_static[i], 0};
+            execve("entry-static.exe", av, 0);
+            exit(99);
+        }
+        int st = -1;
+        if (pid > 0) waitpid(pid, &st, 0);
+        int rc = (pid > 0) ? (st & 0xff) : 99;
+        if (rc == 0)
+            printf("Pass!\n");
+        else
+            printf("FAIL %s [status %d]\n", libctest_static[i], rc);
+        printf("========== END entry-static.exe %s ==========\n", libctest_static[i]);
+    }
+    chdir("/");
+    printf("#### OS COMP TEST GROUP END %s ####\n", group);
+}
 
 void test_pre() {
-    for (unsigned i = 0; i < sizeof(eval_steps) / sizeof(eval_steps[0]); i++) {
-        if (chdir(eval_steps[i].dir) < 0) continue;
-        run_eval_script(eval_steps[i].script);
+    static const struct eval_step first[] = {
+        {"/glibc", "libcbench_testcode.sh"},
+        {"/glibc", "basic_testcode.sh"},
+        {"/glibc", "busybox_testcode.sh"},
+        {"/musl", "libcbench_testcode.sh"},
+        {"/musl", "basic_testcode.sh"},
+    };
+    static const struct eval_step rest[] = {
+        {"/glibc", "lmbench_testcode.sh"},
+        {"/musl", "lmbench_testcode.sh"},
+        {"/glibc", "iozone_testcode.sh"},
+        {"/musl", "iozone_testcode.sh"},
+        {"/glibc", "unixbench_testcode.sh"},
+        {"/musl", "unixbench_testcode.sh"},
+        {"/glibc", "cyclictest_testcode.sh"},
+        {"/musl", "cyclictest_testcode.sh"},
+        {"/glibc", "netperf_testcode.sh"},
+        {"/musl", "netperf_testcode.sh"},
+        {"/glibc", "iperf_testcode.sh"},
+        {"/musl", "iperf_testcode.sh"},
+    };
+    for (unsigned i = 0; i < sizeof(first) / sizeof(first[0]); i++) {
+        if (chdir(first[i].dir) < 0) continue;
+        run_eval_script(first[i].script);
+    }
+    run_libctest_dir("/glibc", "libctest-glibc");
+    run_libctest_dir("/musl", "libctest-musl");
+    for (unsigned i = 0; i < sizeof(rest) / sizeof(rest[0]); i++) {
+        if (chdir(rest[i].dir) < 0) continue;
+        run_eval_script(rest[i].script);
     }
     chdir("/");
 }

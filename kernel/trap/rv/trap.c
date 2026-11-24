@@ -84,7 +84,7 @@ int vmatrylazytouch(uint64 va) {
     }
 
     void *pa = kalloc();
-    if (pa == NULL) panic("vmalazytouch : kalloc");
+    if (pa == NULL) return 0;
     memset(pa, 0, PGSIZE);
 
     uint64 va_aligned = PGROUNDDOWN(va);
