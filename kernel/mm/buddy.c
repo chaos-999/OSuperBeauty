@@ -278,19 +278,10 @@ void *buddy_kalloc(uint64 size) {
 
     // Convert size to pages
     uint64 pages = (size + PGSIZE - 1) / PGSIZE;
-    int offset;
-    for (;;) {
-        offset = buddy_alloc(global_buddy, pages);
-        if (offset < 0) {
-            return 0;  // Allocation failed
-        }
-        if ((uint64)(offset + pages) * PGSIZE <= buddy_mem_size) break;
-        /*
-         * The buddy tree is sized to the next power of two above the usable
-         * physical range, so its tail can extend past PHYSTOP.  Leave that
-         * phantom block marked used (it does not exist) and try the next
-         * free block instead of handing out pages beyond RAM.
-         */
+    int offset = buddy_alloc(global_buddy, pages);
+
+    if (offset < 0) {
+        return 0;  // Allocation failed
     }
 
     char *addr = buddy_mem_base + (offset * PGSIZE);

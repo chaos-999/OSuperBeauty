@@ -157,7 +157,7 @@ static int alloc3_desc(int *idx) {
 
 void virtio_disk_rw(struct buf *b, int write) {
     // printf("[virtio_disk_rw] virtio disk rw, cpuid: %d\n", cpuid());
-    uint64 sector = b->blockno * (BSIZE / 512);
+    uint64 sector = b->blockno;
 
     acquire(&disk.vdisk_lock);
 

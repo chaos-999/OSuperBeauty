@@ -187,7 +187,6 @@ struct proc {
     // these are private to the process, so p->lock need not be held.
     uint64 kstack;                // Virtual address of kernel stack
     uint64 sz;                    // Size of process memory (bytes)
-    uint64 heap_start;            // First address of the lazily grown brk heap
     pagetable_t pagetable;        // User page table
     struct trapframe *trapframe;  // data page for trampoline.S
     struct context context;       // swtch() here to run process
@@ -197,13 +196,10 @@ struct proc {
     char name[16];                // Process name (debugging)
     char console_buf[256];        // Per-process console write buffer
     int console_buf_pos;          // Position in console_buf
-    int vma_n;                    // High-water mark of used VMA slots
     struct vma vmas[NVMA];        // Virtual Memory Areas for mmap
     uint64 clear_child_tid;       // Clear child tid
     uint64 robust_list_head;      // Robust futex list head
     int pt_shared;                // Page table shared via CLONE_VM
-    int tg_shared;                // Thread group shares one page table
-    struct proc *leader;          // Thread group leader (owns shared sz)
     int uid;                      // Real user ID
     int euid;                     // Effective user ID
     int suid;                     // Saved set-user-ID
@@ -217,13 +213,3 @@ struct proc {
     struct sig_handlers *sig_handlers;  // Signal handler table
     struct sig_context *sig_context;    // Signal handling context stack
 };
-
-/*
- * All threads of a group share one address space, hence one VMA table.
- * The leader owns it; threads must look at the leader's table so that a
- * mapping created after a thread was cloned is still visible to it.
- */
-static inline struct proc *proc_vma_owner(struct proc *p) {
-    if (p && p->tg_shared && p->leader && p->leader->state != UNUSED) return p->leader;
-    return p;
-}

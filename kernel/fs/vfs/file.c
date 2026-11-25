@@ -102,7 +102,7 @@ int filestat(struct file *f, uint64 addr) {
     struct proc *p = myproc();
     struct kstat st;
     // Special system files without ext4 backing
-    if (f->f_extfile == NULL || ((struct ext4_file *)f->f_extfile)->mp == NULL) {
+    if (f->f_extfile == NULL) {
         memset(&st, 0, sizeof(st));
         st.st_dev = 0;
         st.st_ino = 1;
@@ -120,13 +120,8 @@ int filestat(struct file *f, uint64 addr) {
         if (copyout(p->pagetable, addr, (char *)(&st), sizeof(st)) < 0) return -1;
         return 0;
     }
-    /*
-     * Use the inode behind the open file, not its path.  tmpfile() opens a
-     * file and immediately unlinks it; a path-based fstat() then fails and
-     * stdio falls back to an unbuffered FILE, making 5M putc/getc calls take
-     * minutes instead of milliseconds.
-     */
-    if (vfs_ext_fstat(f, &st) < 0) {
+    // Use path-based stat so it works for both files and directories
+    if (vfs_ext_stat(f->f_path, &st) < 0) {
         return -1;
     }
     if (copyout(p->pagetable, addr, (char *)(&st), sizeof(st)) < 0) return -1;
@@ -138,7 +133,7 @@ int filestatx(struct file *f, uint64 addr) {
     struct statx sx;
     struct kstat ks;
     // Special system files without ext4 backing
-    if (f->f_extfile == NULL || ((struct ext4_file *)f->f_extfile)->mp == NULL) {
+    if (f->f_extfile == NULL) {
         memset(&sx, 0, sizeof(sx));
         sx.stx_blksize = 4096;
         sx.stx_nlink = 1;
@@ -149,8 +144,8 @@ int filestatx(struct file *f, uint64 addr) {
         if (copyout(p->pagetable, addr, (char *)(&sx), sizeof(sx)) < 0) return -1;
         return 0;
     }
-    /* Same reason as filestat(): use the open inode, not the path. */
-    if (vfs_ext_fstat(f, &ks) < 0) {
+    // Use path-based stat so directories are handled
+    if (vfs_ext_stat(f->f_path, &ks) < 0) {
         return -1;
     }
     memset(&sx, 0, sizeof(sx));
@@ -247,60 +242,11 @@ int fileread(struct file *f, uint64 addr, int n) {
         // printf("here1\n");
         r = vfs_ext_read(f, 1, addr, n);
     } else if (f->f_type == 9) {
-        /*
-         * Synthetic files: /dev/null returns EOF, but /proc/meminfo,
-         * /proc/version and friends must return content or LTP's
-         * tst_memutils aborts every test with TBROK.
-         */
-        const char *content = 0;
-        if (strcmp(f->f_path, "/proc/meminfo") == 0) {
-            content = "MemTotal:         1048576 kB\n"
-                      "MemFree:           524288 kB\n"
-                      "MemAvailable:      524288 kB\n"
-                      "Buffers:                0 kB\n"
-                      "Cached:                 0 kB\n"
-                      "SwapTotal:              0 kB\n"
-                      "SwapFree:               0 kB\n";
-        } else if (strcmp(f->f_path, "/proc/version") == 0) {
-            content = "Linux version 6.6.0 (oscomp) (gcc) #1 SMP\n";
-        } else if (strcmp(f->f_path, "/proc/filesystems") == 0) {
-            content = "nodev\tsysfs\nnodev\tproc\n\text4\n";
-        } else if (strcmp(f->f_path, "/proc/mounts") == 0) {
-            content = "/dev/vda / ext4 rw,relatime 0 0\n";
-        } else if (strcmp(f->f_path, "/etc/passwd") == 0) {
-            content = "root:x:0:0:root:/root:/bin/sh\n"
-                      "nobody:x:65534:65534:nobody:/nonexistent:/bin/false\n";
-        } else if (strcmp(f->f_path, "/etc/group") == 0) {
-            content = "root:x:0:\nnogroup:x:65534:\nnobody:x:65534:\n";
-        }
-        if (content == 0) {
-            return 0; /* EOF, e.g. /dev/null */
-        }
-        int clen = (int)strlen(content);
-        if (f->f_pos >= clen) return 0;
-        int m = n;
-        if (m > clen - f->f_pos) m = clen - f->f_pos;
-        if (copyout(myproc()->pagetable, addr, (char *)content + f->f_pos, m) < 0) return -1;
-        f->f_pos += m;
-        return m;
+        char a = 0;
+        copyout(myproc()->pagetable, addr, (char *)&a, sizeof(char));
+        return 0;
     } else if (f->f_type == 8) {
-        /*
-         * /dev/zero: every read fills the user buffer with zero bytes and
-         * returns the requested count; it never signals EOF.  (/dev/null is
-         * f_type == 9 above and correctly returns 0.)  A shared static
-         * zero buffer avoids re-zeroing 512 bytes of kernel stack on every
-         * read while still chunking large requests.
-         */
-        if (n <= 0) return 0;
-        static char zeros[512];
-        int remain = n;
-        while (remain > 0) {
-            int chunk = remain < (int)sizeof(zeros) ? remain : (int)sizeof(zeros);
-            if (copyout(myproc()->pagetable, addr, zeros, chunk) < 0) return -1;
-            addr += chunk;
-            remain -= chunk;
-        }
-        return n;
+        return 0;
     } else {
         panic("fileread");
     }

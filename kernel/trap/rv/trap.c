@@ -27,8 +27,7 @@ void trapinit(void) {
 }
 
 struct vma *findvma(struct proc *p, uint64 va) {
-    p = proc_vma_owner(p);
-    for (int i = 0; i < p->vma_n; i++) {
+    for (int i = 0; i < NVMA; i++) {
         struct vma *vv = &p->vmas[i];
         // if (vv->valid == 1) {
         //     printf("findvma: vma[%d] = %lx\n", i, vv->addr);
@@ -45,46 +44,11 @@ int vmatrylazytouch(uint64 va) {
     struct proc *p = myproc();
     struct vma *v = findvma(p, va);
     // printf("here1\n");
-    if (v == 0) {
-        /*
-         * Defensive demand-zero path for a hole in the brk heap: any
-         * unmapped page between heap_start and sz may be faulted in as a
-         * zero page instead of killing the process.
-         */
-        struct proc *owner = proc_vma_owner(p);
-        if (owner->heap_start == 0 || va < owner->heap_start || va >= owner->sz) return 0;
-        void *pa = kalloc();
-        if (pa == NULL) return 0;
-        memset(pa, 0, PGSIZE);
-        if (mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)pa,
-                     PTE_U | PTE_R | PTE_W) != 0) {
-            kfree(pa);
-            return 0;
-        }
-        return 1;
-    }
+    if (v == 0) return 0;
     // printf("here2\n");
 
-    /*
-     * If the page is already present but the access still faulted, the
-     * permission bits are stale (a fixed/overlapping mapping or a partial
-     * mprotect).  Upgrade the PTE from the current VMA instead of remapping.
-     */
-    {
-        uint64 va_aligned = PGROUNDDOWN(va);
-        pte_t *pte = walk(p->pagetable, va_aligned, 0);
-        if (pte && (*pte & PTE_V)) {
-            if (v->prot & PROT_READ) *pte |= PTE_R;
-            if (v->prot & PROT_WRITE) *pte |= PTE_W;
-            if (v->prot & PROT_EXEC) *pte |= PTE_X;
-            *pte |= PTE_U;
-            sfence_vma();
-            return 1;
-        }
-    }
-
     void *pa = kalloc();
-    if (pa == NULL) return 0;
+    if (pa == NULL) panic("vmalazytouch : kalloc");
     memset(pa, 0, PGSIZE);
 
     uint64 va_aligned = PGROUNDDOWN(va);
@@ -184,9 +148,7 @@ void usertrap(void) {
     }
 
     // give up the CPU if this is a timer interrupt.
-    if (which_dev == 2) {
-        yield();
-    }
+    if (which_dev == 2) yield();
 
     sig_deliver(p);
 
@@ -207,21 +169,6 @@ void usertrapret(void) {
     // send syscalls, interrupts, and exceptions to uservec in trampoline.S
     uint64 trampoline_uservec = TRAMPOLINE + (uservec - trampoline);
     w_stvec(trampoline_uservec);
-
-    /*
-     * Threads created with CLONE_VM share the parent's page table, so the
-     * TRAPFRAME slot may still point at the trapframe of whichever thread
-     * returned to user space last.  Point it at this proc's own trapframe:
-     * uservec/userret save and restore the user registers there.
-     */
-    if (p->tg_shared) {
-        pte_t *tfpte = walk(p->pagetable, TRAPFRAME, 0);
-        if (tfpte && PTE2PA(*tfpte) != (uint64)p->trapframe) {
-            *tfpte = PA2PTE((uint64)p->trapframe) | PTE_R | PTE_W | PTE_V;
-            sfence_vma();
-        }
-
-    }
 
     // set up trapframe values that uservec will need when
     // the process next traps into the kernel.

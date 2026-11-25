@@ -101,7 +101,6 @@ extern uint64 sys_umount2(void);
 extern uint64 sys_shutdown(void);
 extern uint64 sys_brk(void);
 extern uint64 sys_clone(void);
-extern uint64 sys_clone3(void);
 extern uint64 sys_gettimeofday(void);
 extern uint64 sys_nanosleep(void);
 extern uint64 sys_wait4(void);
@@ -150,25 +149,6 @@ extern uint64 sys_readv(void);
 extern uint64 sys_lseek(void);
 extern uint64 sys_renameat2(void);
 extern uint64 sys_madvise(void);
-extern uint64 sys_preadv(void);
-extern uint64 sys_pwritev(void);
-extern uint64 sys_personality(void);
-extern uint64 sys_sched_setaffinity(void);
-extern uint64 sys_sched_getaffinity(void);
-extern uint64 sys_getrusage(void);
-extern uint64 sys_prctl(void);
-extern uint64 sys_setitimer(void);
-extern uint64 sys_umask(void);
-extern uint64 sys_msync(void);
-extern uint64 sys_getitimer(void);
-extern uint64 sys_setpgid(void);
-extern uint64 sys_setsid(void);
-extern uint64 sys_mlock(void);
-extern uint64 sys_munlock(void);
-extern uint64 sys_mlockall(void);
-extern uint64 sys_munlockall(void);
-extern uint64 sys_membarrier(void);
-extern uint64 sys_rseq(void);
 extern uint64 sys_mremap(void);
 extern uint64 sys_mprotect(void);
 extern uint64 sys_futex(void);
@@ -215,7 +195,6 @@ static uint64 (*syscalls[])(void) = {
     [SYS_shutdown] sys_shutdown,
     [SYS_brk] sys_brk,
     [SYS_clone] sys_clone,
-    [SYS_clone3] sys_clone3,
     [SYS_gettimeofday] sys_gettimeofday,
     [SYS_nanosleep] sys_nanosleep,
     [SYS_wait4] sys_wait4,
@@ -277,26 +256,6 @@ static uint64 (*syscalls[])(void) = {
     [SYS_symlinkat] sys_symlinkat,
     [SYS_fsync] sys_fsync,
     [SYS_fdatasync] sys_fdatasync,
-[SYS_preadv] sys_preadv,
-    [SYS_pwritev] sys_pwritev,
-    [SYS_personality] sys_personality,
-    [SYS_sched_setaffinity] sys_sched_setaffinity,
-    [SYS_sched_getaffinity] sys_sched_getaffinity,
-    [SYS_getrusage] sys_getrusage,
-    [SYS_prctl] sys_prctl,
-    [SYS_mlock] sys_mlock,
-    [SYS_munlock] sys_munlock,
-    [SYS_mlockall] sys_mlockall,
-    [SYS_munlockall] sys_munlockall,
-    [SYS_membarrier] sys_membarrier,
-    [SYS_rseq] sys_rseq,
-    [SYS_faccessat2] sys_faccessat,
-[SYS_setitimer] sys_setitimer,
-    [SYS_getitimer] sys_getitimer,
-    [SYS_setpgid] sys_setpgid,
-    [SYS_umask] sys_umask,
-    [SYS_msync] sys_msync,
-    [SYS_setsid] sys_setsid,
 };
 
 void syscall(void) {

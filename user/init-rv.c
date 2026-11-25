@@ -41,55 +41,8 @@ char *copy_file_range_name[] = {"copy-file-range-test-1", "copy-file-range-test-
 
 
 
-
-static void run_libcbench_group(const char *dir) {
-    chdir(dir);
-    int pid = fork();
-    if (pid == 0) {
-        char *av[] = {"busybox", "sh", "libcbench_testcode.sh", 0};
-        execve("busybox", av, 0);
-        exit(1);
-    }
-    if (pid > 0) wait(0);
-}
-
-static const char *ltp_tests[] = {"brk01", "chdir01", "pipe01", "read01", "write01", "open01"};
-
-static void run_ltp_dir(const char *dir, const char *group) {
-    printf("#### OS COMP TEST GROUP START %s ####\n", group);
-    if (chdir(dir) < 0) {
-        printf("#### OS COMP TEST GROUP END %s ####\n", group);
-        return;
-    }
-    int n = (int)(sizeof(ltp_tests) / sizeof(ltp_tests[0]));
-    for (int i = 0; i < n; i++) {
-        printf("RUN LTP CASE %s\n", ltp_tests[i]);
-        int pid = fork();
-        if (pid == 0) {
-            char *av[] = {(char *)ltp_tests[i], 0};
-            execve((char *)ltp_tests[i], av, 0);
-            exit(127);
-        }
-        int st = -1;
-        if (pid > 0) waitpid(pid, &st, 0);
-        int rc = (pid > 0) ? (st & 0xff) : 99;
-        if (rc == 0)
-            printf("\x1b[1;32mTPASS: \x1b[0m%s\n", ltp_tests[i]);
-        else
-            printf("\x1b[1;31mTFAIL: \x1b[0m%s\n", ltp_tests[i]);
-        printf("Summary:\npassed   %d\nfailed   %d\nbroken   0\nskipped  0\nwarnings 0\n\n",
-               rc == 0 ? 1 : 0, rc == 0 ? 0 : 1);
-        printf("FAIL LTP CASE %s : %d\n", ltp_tests[i], rc);
-    }
-    chdir("/");
-    printf("#### OS COMP TEST GROUP END %s ####\n", group);
-}
-
 void test_pre() {
     int pid;
-
-    run_libcbench_group("/glibc");
-    run_libcbench_group("/musl");
     char *bb_testcode_local[] = {"busybox", "ash", "busybox_testcode.sh", NULL};
 
     int basic_testcases = 32;
@@ -239,7 +192,6 @@ void test_pre() {
     // }
     // printf("#### OS COMP TEST GROUP END libctest-musl ####\n");
 
-    run_ltp_dir("/musl/ltp/testcases/bin", "ltp-musl");
     return;
 }
 

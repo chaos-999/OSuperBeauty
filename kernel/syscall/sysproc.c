@@ -217,11 +217,7 @@ uint64 sys_brk(void) {
     uint64 n;
 
     argaddr(0, &n);
-    {
-        struct proc *mp = myproc();
-        struct proc *owner = (mp->leader && mp->leader->state != UNUSED) ? mp->leader : mp;
-        addr = owner->sz;
-    }
+    addr = myproc()->sz;
     if (n == 0) {
         return addr;
     }
@@ -234,15 +230,6 @@ uint64 sys_brk(void) {
     return n;
 }
 
-/*
- * clone3 is not implemented; returning -ENOSYS makes glibc fall back to the
- * classic clone syscall.  Registering the number keeps the dispatcher from
- * printing an "unknown sys call 435" line on every probe.
- */
-uint64 sys_clone3(void) {
-    return -ENOSYS;
-}
-
 int sys_clone(void) {
     int flags;
     uint64 stack, tls, ctid, ptid;
@@ -250,21 +237,9 @@ int sys_clone(void) {
     argint(0, &flags);
     argaddr(1, &stack);
     argaddr(2, &ptid);
-#ifdef RISCV
-    /*
-     * RISC-V musl/glibc clone ABI:
-     * clone(flags, stack, ptid, tls, ctid)
-     */
     argaddr(3, &tls);
     argaddr(4, &ctid);
-#elif defined(LOONGARCH)
-    /*
-     * LoongArch musl clone ABI:
-     * clone(flags, stack, ptid, ctid, tls)
-     */
-    argaddr(3, &ctid);
-    argaddr(4, &tls);
-#endif
+    // TODO
     return clone(flags, (void *)stack, (uint64)ptid, tls, (uint64)ctid);
 }
 
@@ -388,55 +363,13 @@ uint64 sys_uname(void) {
 
 // Find VMA by address
 static int find_vma_by_addr(struct proc *p, uint64 addr) {
-    p = proc_vma_owner(p);
-    for (int i = 0; i < p->vma_n; i++) {
+    for (int i = 0; i < NVMA; i++) {
         if (p->vmas[i].valid && p->vmas[i].addr <= addr &&
             addr < p->vmas[i].addr + p->vmas[i].length) {
             return i;
         }
     }
     return -1;
-}
-
-/*
- * Drop/replace every mapping that overlaps [addr, addr+sz).  The dynamic
- * loader reserves a range and then maps the ELF segments over it with
- * MAP_FIXED; support that by trimming or removing the old VMAs and
- * unmapping their pages.
- */
-static void mmap_replace_range(struct proc *vo, pagetable_t pt, uint64 addr, uint64 sz) {
-    uint64 end = addr + sz;
-    for (int i = 0; i < vo->vma_n; i++) {
-        struct vma *v = &vo->vmas[i];
-        if (!v->valid) continue;
-        uint64 vs = v->addr, ve = v->addr + v->length;
-        if (ve <= addr || vs >= end) continue;
-        uint64 s = vs > addr ? vs : addr;
-        uint64 e = ve < end ? ve : end;
-        vmaunmap(pt, s, e - s, v);
-        if (s == vs && e == ve) {
-            if (v->f) get_fops()->close(v->f);
-            v->valid = 0;
-        } else if (s == vs) {
-            v->offset += e - s;
-            v->addr = e;
-            v->length = ve - e;
-        } else if (e == ve) {
-            v->length = s - vs;
-        } else {
-            /* hole in the middle: keep the head and copy the tail */
-            if (vo->vma_n < NVMA) {
-                struct vma *nv = &vo->vmas[vo->vma_n++];
-                *nv = *v;
-                nv->addr = e;
-                nv->offset = v->offset + (e - vs);
-                nv->length = ve - e;
-                if (nv->f) get_fops()->dup(nv->f);
-            }
-            v->length = s - vs;
-        }
-    }
-    while (vo->vma_n > 0 && !vo->vmas[vo->vma_n - 1].valid) vo->vma_n--;
 }
 
 uint64 sys_mmap(void) {
@@ -452,12 +385,17 @@ uint64 sys_mmap(void) {
     argint(4, &fd);
     argaddr(5, &offset);
 
-
     if (strcmp(myproc()->name, "git") == 0) {
         // printf("DEBUG: sys_mmap ENTER pid=%d addr=%lx sz=%lx prot=0x%x flags=0x%x fd=%d
         // off=%lx\n", myproc()->pid, addr, sz, prot, flags, fd, offset);
     }
 
+    if (flags & MAP_FIXED) {
+        if (strcmp(myproc()->name, "git") == 0) {
+            // printf("DEBUG: sys_mmap reject MAP_FIXED\n");
+        }
+        return -EINVAL;
+    }
 
     if (sz == 0) {
         sz_zero = 1;
@@ -487,58 +425,29 @@ uint64 sys_mmap(void) {
     sz = PGROUNDUP(sz);
 
     struct proc *p = myproc();
-    struct proc *vo = proc_vma_owner(p);
     struct vma *v = 0;
     uint64 vaend = MMAPEND;
-    int fixed = (flags & MAP_FIXED) != 0;
 
-    if (fixed) {
-        addr = PGROUNDDOWN(addr);
-        /*
-         * The mmap area is [USTACK_TOP, MMAPEND); only reject ranges outside
-         * user space or overlapping the fixed user stack.
-         */
-        if (addr < PGSIZE || addr + sz > MMAPEND || addr + sz < addr ||
-            (addr < USTACK_TOP && addr + sz > USTACK)) {
-            return -EINVAL;
-        }
-        mmap_replace_range(vo, p->pagetable, addr, sz);
-    }
-
-    for (int i = 0; i < vo->vma_n; i++) {
-        struct vma *vv = &vo->vmas[i];
+    for (int i = 0; i < NVMA; i++) {
+        struct vma *vv = &p->vmas[i];
         if (!vv->valid) {
-            if (!v) v = vv;
-        } else if (!fixed && vv->addr < vaend) {
+            if (!v) {
+                v = &p->vmas[i];
+                v->valid = 1;
+            }
+        } else if (vv->addr < vaend) {
             vaend = PGROUNDDOWN(vv->addr);
         }
     }
-    if (!v) {
-        if (vo->vma_n >= NVMA) panic("mmap: no free vma");
-        v = &vo->vmas[vo->vma_n];
-        vo->vma_n++;
-    }
-    v->valid = 1;
 
-    v->addr = fixed ? addr : vaend - sz;
+    if (!v) panic("mmap: no free vma");
+
+    v->addr = vaend - sz;
     v->length = sz;
     v->prot = prot;
     v->flags = flags;
     v->f = f;
     v->offset = offset;
-
-#ifdef LOONGARCH
-    /*
-     * LoongArch walks the page table in the TLB-refill exception handler.
-     * If an intermediate level is missing the handler cannot turn the miss
-     * into a normal page fault and the guest spins in the refill path.
-     * Pre-create the page-table levels (not the data pages) for the mapping
-     * so lazily touched pages fault into usertrap() as intended.
-     */
-    for (uint64 a = v->addr; a < v->addr + sz; a += 2 * 1024 * 1024)
-        walk(p->pagetable, a, 1);
-    walk(p->pagetable, v->addr + sz - PGSIZE, 1);
-#endif
 
     if (f != NULL) {
         get_fops()->dup(v->f);
@@ -608,12 +517,6 @@ uint64 sys_munmap(void) {
         v->valid = 0;
     }
 
-    /* Shrink the high-water mark so VMA scans stay short. */
-    {
-        struct proc *vo = proc_vma_owner(p);
-        while (vo->vma_n > 0 && !vo->vmas[vo->vma_n - 1].valid) vo->vma_n--;
-    }
-
     if (strcmp(myproc()->name, "git") == 0) {
         // printf("DEBUG: sys_munmap DONE vma_valid=%d new_vma=[%lx,%lx)\n", v->valid, v->addr,
         // v->addr + v->length);
@@ -628,14 +531,18 @@ uint64 sys_set_tid_address(void) {
 
     argaddr(0, &tidptr);
 
-    /*
-     * Linux set_tid_address() only records the address that the kernel must
-     * clear (and futex-wake) when this thread exits.  It must NOT write the
-     * tid to user memory: musl passes &__thread_list_lock here, and writing
-     * the tid would make the thread-list lock look permanently held.
-     */
+    // Store the clear_child_tid pointer
     p->clear_child_tid = tidptr;
-    return p->tid;
+
+    // For glibc compatibility, write TID to user space if requested
+    if (tidptr != 0) {
+        int tid = p->pid;
+        if (copyout(p->pagetable, tidptr, (char *)&tid, sizeof(tid)) < 0) {
+            return -EFAULT;  // EFAULT
+        }
+    }
+
+    return p->pid;
 }
 
 // getuid - 返回real user ID
@@ -1681,15 +1588,14 @@ uint64 sys_mprotect(void) {
 
     if (addr + len < addr) return -EINVAL;
 
-    /*
-     * mmap() only records a VMA; pages are allocated lazily.  pthread_create
-     * does mmap(PROT_NONE) then mprotect(stack, PROT_READ|WRITE), so the
-     * pages are not present yet.  Do not fail on missing PTEs: only update
-     * pages that already exist, and update VMA protection for future faults.
-     */
     for (uint64 va = addr; va < addr + len; va += PGSIZE) {
         pte_t *pte = walk(p->pagetable, va, 0);
-        if (pte == 0 || (*pte & PTE_V) == 0) continue;
+        if (pte == 0 || (*pte & PTE_V) == 0) return -ENOMEM;
+    }
+
+    for (uint64 va = addr; va < addr + len; va += PGSIZE) {
+        pte_t *pte = walk(p->pagetable, va, 0);
+        if (pte == 0) continue;
 
         *pte &= ~(PTE_R | PTE_W | PTE_X);
 
@@ -1700,15 +1606,11 @@ uint64 sys_mprotect(void) {
         *pte |= PTE_U;
     }
 
-    {
-        struct proc *vo = proc_vma_owner(p);
-        for (int i = 0; i < vo->vma_n; i++) {
-            struct vma *v = &vo->vmas[i];
-            if (!v->valid) continue;
-            /* Update every overlapping VMA (a partial mprotect is allowed). */
-            if (addr < v->addr + v->length && addr + len > v->addr) {
-                v->prot = prot;
-            }
+    int vma_idx = find_vma_by_addr(p, addr);
+    if (vma_idx >= 0) {
+        struct vma *v = &p->vmas[vma_idx];
+        if (v->addr == addr && v->length == len) {
+            v->prot = prot;
         }
     }
 
@@ -1725,28 +1627,24 @@ uint64 sys_mprotect(void) {
 
 uint64 sys_futex(void) {
     uint64 uaddr;
-    int op, val, val3 = 0;
+    int op, val;
 
-    // futex(uaddr, op, val, timeout, uaddr2, val3)
+    // Get arguments: futex(uaddr, op, val, timeout, uaddr2, val3)
     argaddr(0, &uaddr);
     argint(1, &op);
     argint(2, &val);
-    argint(5, &val3);  // bitset for WAIT_BITSET / WAKE_BITSET
+    // We ignore timeout, uaddr2, val3 for basic implementation
 
-    // Strip FUTEX_PRIVATE_FLAG (128) and FUTEX_CLOCK_REALTIME (256)
-    op = op & 0x7F;
+    // Extract actual operation (remove private flag)
+    op = op & 0xF;
 
     switch (op) {
         case FUTEX_WAIT:
             return futex_wait(uaddr, (uint32)val);
         case FUTEX_WAKE:
             return futex_wake(uaddr, val);
-        case FUTEX_WAIT_BITSET:
-            return futex_wait_bitset(uaddr, (uint32)val, (uint32)val3);
-        case FUTEX_WAKE_BITSET:
-            return futex_wake_bitset(uaddr, val, (uint32)val3);
         default:
-            return -ENOSYS;
+            return -ENOSYS;  // ENOSYS equivalent
     }
 }
 
@@ -1921,191 +1819,3 @@ void backtrace(void) {
     }
 }
 #endif
-
-/* ---------------- small compatibility syscalls for LTP ---------------- */
-
-uint64 sys_prctl(void) {
-    int option;
-    uint64 a2 = 0, a3 = 0, a4 = 0, a5 = 0;
-    argint(0, &option);
-    argaddr(1, &a2);
-    argaddr(2, &a3);
-    argaddr(3, &a4);
-    argaddr(4, &a5);
-    struct proc *p = myproc();
-    switch (option) {
-        case 15: { /* PR_SET_NAME */
-            char name[16];
-            if (copyinstr(p->pagetable, name, a2, sizeof(name)) < 0) return -EFAULT;
-            safestrcpy(p->name, name, sizeof(p->name));
-            return 0;
-        }
-        case 16: { /* PR_GET_NAME */
-            char name[16];
-            int n;
-            memset(name, 0, sizeof(name));
-            n = strlen(p->name);
-            if (n > 15) n = 15;
-            memmove(name, p->name, n);
-            if (copyout(p->pagetable, a2, name, sizeof(name)) < 0) return -EFAULT;
-            return 0;
-        }
-        case 1:  /* PR_SET_PDEATHSIG */
-        case 4:  /* PR_SET_DUMPABLE */
-        case 36: /* PR_SET_CHILD_SUBREAPER */
-        case 38: /* PR_SET_NO_NEW_PRIVS */
-            return 0;
-        case 2: { /* PR_GET_PDEATHSIG */
-            int v = 0;
-            if (copyout(p->pagetable, a2, (char *)&v, sizeof(v)) < 0) return -EFAULT;
-            return 0;
-        }
-        case 3: { /* PR_GET_DUMPABLE */
-            int v = 1;
-            if (copyout(p->pagetable, a2, (char *)&v, sizeof(v)) < 0) return -EFAULT;
-            return 0;
-        }
-        case 37: { /* PR_GET_CHILD_SUBREAPER */
-            int v = 0;
-            if (copyout(p->pagetable, a2, (char *)&v, sizeof(v)) < 0) return -EFAULT;
-            return 0;
-        }
-        case 39: { /* PR_GET_NO_NEW_PRIVS */
-            int v = 1;
-            if (copyout(p->pagetable, a2, (char *)&v, sizeof(v)) < 0) return -EFAULT;
-            return 0;
-        }
-        default:
-            return -EINVAL;
-    }
-}
-
-uint64 sys_getrusage(void) {
-    int who;
-    uint64 addr;
-    char ru[144];
-    argint(0, &who);
-    argaddr(1, &addr);
-    if (who != 0 && who != 1 && who != -1) return -EINVAL;
-    memset(ru, 0, sizeof(ru));
-    if (copyout(myproc()->pagetable, addr, ru, sizeof(ru)) < 0) return -EFAULT;
-    return 0;
-}
-
-uint64 sys_sched_setaffinity(void) {
-    int pid, len;
-    uint64 mask;
-    char buf[256];
-    int n;
-    argint(0, &pid);
-    argint(1, &len);
-    argaddr(2, &mask);
-    if (len <= 0) return -EINVAL;
-    n = len > (int)sizeof(buf) ? (int)sizeof(buf) : len;
-    if (copyin(myproc()->pagetable, buf, mask, n) < 0) return -EFAULT;
-    return 0;
-}
-
-uint64 sys_sched_getaffinity(void) {
-    int pid, len;
-    uint64 mask;
-    char buf[256];
-    int n;
-    argint(0, &pid);
-    argint(1, &len);
-    argaddr(2, &mask);
-    if (len <= 0) return -EINVAL;
-    memset(buf, 0, sizeof(buf));
-    buf[0] = 1; /* CPU 0 only */
-    n = len > (int)sizeof(buf) ? (int)sizeof(buf) : len;
-    if (copyout(myproc()->pagetable, mask, buf, n) < 0) return -EFAULT;
-    return 0;
-}
-
-uint64 sys_personality(void) {
-    uint64 persona;
-    argaddr(0, &persona);
-    return 0;
-}
-
-uint64 sys_mlock(void) {
-    uint64 addr, len;
-    argaddr(0, &addr);
-    argaddr(1, &len);
-    return 0;
-}
-
-uint64 sys_munlock(void) {
-    uint64 addr, len;
-    argaddr(0, &addr);
-    argaddr(1, &len);
-    return 0;
-}
-
-uint64 sys_mlockall(void) {
-    int flags;
-    argint(0, &flags);
-    return 0;
-}
-
-uint64 sys_munlockall(void) { return 0; }
-
-uint64 sys_membarrier(void) {
-    int cmd, flags;
-    argint(0, &cmd);
-    argint(1, &flags);
-    if (cmd == 0) return 121; /* MEMBARRIER_CMD_QUERY: advertise common commands */
-    if (flags != 0) return -EINVAL;
-    return 0;
-}
-
-uint64 sys_rseq(void) { return 0; }
-
-uint64 sys_setitimer(void) {
-    int which;
-    uint64 newv, oldv;
-    argint(0, &which);
-    argaddr(1, &newv);
-    argaddr(2, &oldv);
-    if (oldv) {
-        char z[32];
-        memset(z, 0, sizeof(z));
-        if (copyout(myproc()->pagetable, oldv, z, sizeof(z)) < 0) return -EFAULT;
-    }
-    return 0;
-}
-
-uint64 sys_getitimer(void) {
-    int which;
-    uint64 cur;
-    argint(0, &which);
-    argaddr(1, &cur);
-    char z[32];
-    memset(z, 0, sizeof(z));
-    if (copyout(myproc()->pagetable, cur, z, sizeof(z)) < 0) return -EFAULT;
-    return 0;
-}
-
-uint64 sys_setpgid(void) {
-    int pid, pgid;
-    argint(0, &pid);
-    argint(1, &pgid);
-    return 0;
-}
-
-uint64 sys_setsid(void) { return myproc()->pid; }
-
-uint64 sys_umask(void) {
-    int mask;
-    argint(0, &mask);
-    return 0;
-}
-
-uint64 sys_msync(void) {
-    uint64 addr, len;
-    int flags;
-    argaddr(0, &addr);
-    argaddr(1, &len);
-    argint(2, &flags);
-    return 0;
-}

@@ -712,7 +712,7 @@ int vfs_ext_stat(const char *path, struct kstat *st) {
 int vfs_ext_fstat(struct file *f, struct kstat *st) {
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     struct ext4_inode_ref ref;
-    if (file == NULL || file->mp == NULL) {
+    if (file == NULL) {
         return -EBADF;  // 非 ext4 文件或无底层结构
     }
 

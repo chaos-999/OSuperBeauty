@@ -54,7 +54,6 @@
 #define SYS_munmap 215
 #define SYS_mremap 216
 #define SYS_clone 220
-#define SYS_clone3 435
 #define SYS_execve 221
 #define SYS_mmap 222
 #define SYS_mprotect 226
@@ -104,25 +103,3 @@
 #define SYS_fdatasync 83
 #define SYS_fchownat 54
 #define SYS_fchown 666
-
-// Small compatibility syscalls (asm-generic numbers, used by LTP)
-#define SYS_preadv 69
-#define SYS_pwritev 70
-#define SYS_personality 92
-#define SYS_sched_setaffinity 122
-#define SYS_sched_getaffinity 123
-#define SYS_getrusage 165
-#define SYS_prctl 167
-#define SYS_mlock 228
-#define SYS_munlock 229
-#define SYS_mlockall 230
-#define SYS_munlockall 231
-#define SYS_membarrier 283
-#define SYS_rseq 293
-#define SYS_faccessat2 439
-#define SYS_setitimer 103
-#define SYS_getitimer 102
-#define SYS_setpgid 154
-#define SYS_setsid 157
-#define SYS_umask 166
-#define SYS_msync 227
