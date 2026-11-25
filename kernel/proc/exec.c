@@ -231,6 +231,7 @@ int execve(char *path, char **argv, char **envp) {
 
     // Load program into memory.
     uint64 first_load_vaddr = 0;
+    int first_load_set = 0;
     for (i = 0, off = elf.phoff; i < elf.phnum; i++, off += sizeof(ph)) {
         if (ip->i_op->read(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph)) goto bad;
         if (ph.type == ELF_PROG_INTERP) {
@@ -241,7 +242,10 @@ int execve(char *path, char **argv, char **envp) {
             continue;
         }
         if (ph.type != ELF_PROG_LOAD) continue;
-        if (first_load_vaddr == 0 || ph.vaddr < first_load_vaddr) first_load_vaddr = ph.vaddr;
+        if (!first_load_set || ph.vaddr < first_load_vaddr) {
+            first_load_vaddr = ph.vaddr;
+            first_load_set = 1;
+        }
         if (ph.memsz < ph.filesz) goto bad;
         if (ph.vaddr + ph.memsz < ph.vaddr) goto bad;
         uint64 sz1;
@@ -262,6 +266,7 @@ int execve(char *path, char **argv, char **envp) {
             goto bad;
         }
     }
+
 
     /* 读取 PT_INTERP 指定的动态链接器路径。 */
     if (interp_len > 0) {

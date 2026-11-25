@@ -192,7 +192,7 @@ static void run_libctest_dir(const char *dir, const char *group) {
 
 
 static const char *ltp_tests[] = {"brk01", "chdir01", "pipe01", "read01", "write01",
-                                  "open01"};
+                                  "open01", "close01", "mmap02", "lseek01", "unlink01"};
 
 static void run_ltp_dir(const char *dir, const char *group) {
     printf("#### OS COMP TEST GROUP START %s ####\n", group);
