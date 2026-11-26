@@ -92,6 +92,7 @@ int shutdown(void);
 void *brk(void *addr);
 int gettimeofday(struct timeval *, struct timezone *);
 int nanosleep(const struct timespec *, struct timespec *);
+int sync(void);
 int waitpid(int pid, int *wstatus, int options);
 int sched_yield(void);
 long times(struct tms *);

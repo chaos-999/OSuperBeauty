@@ -96,6 +96,7 @@ entry("ftruncate");
 entry("splice");
 entry("symlinkat");
 entry("fsync");
+entry("sync");
 entry("fdatasync");
 entry("fchownat");
 entry("fchown");

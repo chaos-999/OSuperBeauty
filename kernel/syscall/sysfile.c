@@ -1265,6 +1265,16 @@ uint64 sys_fsync(void) {
     return 0;
 }
 
+uint64 sys_sync(void) {
+    for (int i = 0; i < VFS_MAX_FS; i++) {
+        filesystem_t *fs = fs_table[i];
+        if (fs && fs->type == EXT4) {
+            vfs_ext_flush(fs);
+        }
+    }
+    return 0;
+}
+
 uint64 sys_fdatasync(void) {
     int fd;
     struct file *f;

@@ -478,6 +478,7 @@ void test_pre() {
     run_libcbench_group("/musl", "libcbench_testcode.sh");
     run_lua_group("/musl", "lua-musl");
     run_lua_group("/glibc", "lua-glibc");
+    sync();
     run_ltp_dir("/musl/ltp/testcases/bin", "ltp-musl");
 
     return;

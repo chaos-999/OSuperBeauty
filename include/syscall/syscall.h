@@ -109,6 +109,7 @@
 
 #define SYS_symlinkat 36
 #define SYS_fsync 82
+#define SYS_sync 81
 #define SYS_fdatasync 83
 #define SYS_fchownat 54
 #define SYS_fchown 666
