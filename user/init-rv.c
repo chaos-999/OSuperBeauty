@@ -87,6 +87,83 @@ static void run_lua_group(const char *dir, const char *group) {
     printf("#### OS COMP TEST GROUP END %s ####\n", group);
 }
 
+static int has_sub(const char *s, const char *t) {
+    for (; *s; s++) {
+        const char *a = s, *b = t;
+        while (*b && *a == *b) { a++; b++; }
+        if (!*b) return 1;
+    }
+    return 0;
+}
+
+static const char *ltp_tests[] = {"brk01", "pipe01", "read01",
+                                  "write01", "open01", "lseek01"};
+
+static void run_ltp_dir(const char *dir, const char *group) {
+    printf("#### OS COMP TEST GROUP START %s ####\n", group);
+    if (chdir(dir) < 0) {
+        printf("#### OS COMP TEST GROUP END %s ####\n", group);
+        return;
+    }
+    int n = (int)(sizeof(ltp_tests) / sizeof(ltp_tests[0]));
+    for (int i = 0; i < n; i++) {
+        printf("RUN LTP CASE %s\n", ltp_tests[i]);
+        unlinkat(AT_FDCWD, "/tmp/ltp.out", 0);
+        int pid = fork();
+        if (pid == 0) {
+            close(1);
+            close(2);
+            int fd = open("/tmp/ltp.out", O_CREAT | O_TRUNC | O_RDWR, 0644);
+            if (fd >= 0) {
+                int f2 = dup(1);   /* dup the file to stderr as well */
+                (void)f2;
+            }
+            char *av[] = {(char *)ltp_tests[i], 0};
+            char *ev[] = {"LD_LIBRARY_PATH=/musl/lib", 0};
+            execve((char *)ltp_tests[i], av, ev);
+            exit(127);
+        }
+        int st = 0;
+        if (pid > 0) wait(&st);
+
+        int pass = 0, fail = 0, brk = 0, skip = 0;
+        int fd = open("/tmp/ltp.out", O_RDONLY, 0);
+        if (fd >= 0) {
+            static char buf[4096];
+            static char line[1024];
+            int ll = 0, r;
+            while ((r = read(fd, buf, sizeof(buf))) > 0) {
+                for (int k = 0; k < r; k++) {
+                    char c = buf[k];
+                    if (c == '\n') {
+                        line[ll] = 0;
+                        if (has_sub(line, "TPASS")) { pass++; printf("%s\n", line); }
+                        else if (has_sub(line, "TFAIL")) { fail++; printf("%s\n", line); }
+                        else if (has_sub(line, "TBROK")) { brk++; printf("%s\n", line); }
+                        else if (has_sub(line, "TCONF") || has_sub(line, "TSKIP")) { skip++; printf("%s\n", line); }
+                        ll = 0;
+                    } else if (ll < (int)sizeof(line) - 1) {
+                        line[ll++] = c;
+                    }
+                }
+            }
+            if (ll > 0) {
+                line[ll] = 0;
+                if (has_sub(line, "TPASS")) { pass++; printf("%s\n", line); }
+                else if (has_sub(line, "TFAIL")) { fail++; printf("%s\n", line); }
+                else if (has_sub(line, "TBROK")) { brk++; printf("%s\n", line); }
+            }
+            close(fd);
+        }
+        printf("Summary:\npassed   %d\nfailed   %d\nbroken   %d\nskipped  %d\nwarnings 0\n\n",
+               pass, fail, brk, skip);
+        printf("FAIL LTP CASE %s : %d\n", ltp_tests[i], st & 0xff);
+    }
+    chdir("/");
+    printf("#### OS COMP TEST GROUP END %s ####\n", group);
+}
+
+
 void test_pre() {
     int pid;
     char *bb_testcode_local[] = {"busybox", "ash", "busybox_testcode.sh", NULL};
@@ -243,6 +320,7 @@ void test_pre() {
     run_libcbench_group("/musl", "libcbench_testcode.sh");
     run_lua_group("/musl", "lua-musl");
     run_lua_group("/glibc", "lua-glibc");
+    run_ltp_dir("/musl/ltp/testcases/bin", "ltp-musl");
 
     return;
 }

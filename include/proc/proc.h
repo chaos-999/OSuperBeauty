@@ -188,6 +188,8 @@ struct proc {
     uint64 kstack;                // Virtual address of kernel stack
     uint64 sz;                    // Size of process memory (bytes)
     uint64 heap_start;            // First address of the lazily grown brk heap
+    uint64 interp_start;           // Dynamic interpreter (ld.so) load range, if any
+    uint64 interp_end;
     pagetable_t pagetable;        // User page table
     struct trapframe *trapframe;  // data page for trampoline.S
     struct context context;       // swtch() here to run process

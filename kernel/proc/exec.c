@@ -100,11 +100,12 @@ static struct inode *exec_open_interp(const char *path) {
 }
 
 static int exec_load_interp(pagetable_t pagetable, struct inode *ip,
-                            uint64 base, uint64 *entry_out) {
+                            uint64 base, uint64 *entry_out, uint64 *end_out) {
     struct elfhdr lelf;
     struct proghdr ph;
     uint64 off;
     int i;
+    uint64 maxend = base;
 
     if (ip->i_op->read(ip, 0, (uint64)&lelf, 0, sizeof(lelf)) != sizeof(lelf))
         return -1;
@@ -125,6 +126,8 @@ static int exec_load_interp(pagetable_t pagetable, struct inode *ip,
         uint64 vend = va + ph.memsz;
         if (va < base || vend < va)
             return -1;
+        if (vend > maxend)
+            maxend = vend;
 
         /* 解释器不进入 p->sz，单独映射到 base 以上的固定区域。 */
 #ifdef RISCV
@@ -177,6 +180,7 @@ static int exec_load_interp(pagetable_t pagetable, struct inode *ip,
     }
 
     *entry_out = base + lelf.entry;
+    if (end_out) *end_out = maxend;
     return 0;
 }
 #endif /* RISCV || LOONGARCH */
@@ -191,7 +195,7 @@ int execve(char *path, char **argv, char **envp) {
     struct proghdr ph;
     char interp_buf[MAXPATH] = {0};
     uint64 interp_off = 0, interp_len = 0;
-    uint64 interp_base = 0, interp_entry = 0;
+    uint64 interp_base = 0, interp_entry = 0, interp_end = 0;
     int has_interp = 0;
     pagetable_t pagetable = 0, oldpagetable;
     struct proc *p = myproc();
@@ -287,7 +291,7 @@ int execve(char *path, char **argv, char **envp) {
         }
         lip->i_op->lock(lip);
         interp_base = 0x40000000;
-        if (exec_load_interp(pagetable, lip, interp_base, &interp_entry) < 0) {
+        if (exec_load_interp(pagetable, lip, interp_base, &interp_entry, &interp_end) < 0) {
             lip->i_op->unlock(lip);
             goto bad;
         }
@@ -409,15 +413,21 @@ int execve(char *path, char **argv, char **envp) {
 
     // Commit to the user image.
     oldpagetable = p->pagetable;
+    uint64 old_interp_start = p->interp_start, old_interp_end = p->interp_end;
     p->pagetable = pagetable;
     p->sz = sz;
     p->heap_start = sz;                     // Process size only includes program segments, not stack
+    p->interp_start = has_interp ? interp_base : 0;
+    p->interp_end = has_interp ? interp_end : 0;
     p->trapframe->epc = has_interp ? interp_entry : elf.entry;  // dynamic ELF starts in interpreter
     p->trapframe->sp = sp;          // initial stack pointer
     set_exec_path(path);  // for /proc/self/exe
 
     release(&p->lock);
 
+    if (old_interp_end > old_interp_start)
+        uvmunmap(oldpagetable, old_interp_start,
+                 (old_interp_end - old_interp_start + PGSIZE - 1) / PGSIZE, 1);
     proc_freepagetable(oldpagetable, oldsz);
     return 0;  // this ends up in a0, the first argument to main(argc, argv)
 
@@ -482,7 +492,7 @@ int execve(char *path, char **argv, char **envp) {
     struct proghdr ph;
     char interp_buf[MAXPATH] = {0};
     uint64 interp_off = 0, interp_len = 0;
-    uint64 interp_base = 0, interp_entry = 0;
+    uint64 interp_base = 0, interp_entry = 0, interp_end = 0;
     int has_interp = 0;
     pagetable_t pagetable = 0, oldpagetable;
     struct proc *p = myproc();
@@ -579,7 +589,7 @@ int execve(char *path, char **argv, char **envp) {
         }
         lip->i_op->lock(lip);
         interp_base = 0x40000000;
-        if (exec_load_interp(pagetable, lip, interp_base, &interp_entry) < 0) {
+        if (exec_load_interp(pagetable, lip, interp_base, &interp_entry, &interp_end) < 0) {
             lip->i_op->unlock(lip);
             ret = -ENOEXEC;
             goto bad;
@@ -718,9 +728,12 @@ int execve(char *path, char **argv, char **envp) {
     }
 
     oldpagetable = p->pagetable;
+    uint64 old_interp_start = p->interp_start, old_interp_end = p->interp_end;
     p->pagetable = pagetable;
     p->sz = sz;
     p->heap_start = sz;
+    p->interp_start = has_interp ? interp_base : 0;
+    p->interp_end = has_interp ? interp_end : 0;
 
     // 设置寄存器：动态 ELF 从解释器入口开始执行
     p->trapframe->era = has_interp ? interp_entry : elf.entry;
@@ -733,6 +746,9 @@ int execve(char *path, char **argv, char **envp) {
 
     release(&p->lock);
 
+    if (old_interp_end > old_interp_start)
+        uvmunmap(oldpagetable, old_interp_start,
+                 (old_interp_end - old_interp_start + PGSIZE - 1) / PGSIZE, 1);
     proc_freepagetable(oldpagetable, oldsz);
     return 0;
 

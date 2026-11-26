@@ -530,6 +530,33 @@ int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) {
         }
     }
 
+    {
+        struct proc *pp = myproc();
+        if (pp->interp_end > pp->interp_start) {
+            for (i = pp->interp_start; i < pp->interp_end; i += PGSIZE) {
+                if ((pte = walk(old, i, 0)) == 0 || (*pte & PTE_V) == 0) continue;
+                /* The interpreter usually sits below p->sz for non-PIE
+                 * executables, so the [0, sz) loop above already copied it.
+                 * Only fill holes (needed for PIE programs whose image is
+                 * loaded near address 0 and whose ld.so lives above p->sz). */
+                pte_t *d = walk(new, i, 0);
+                if (d && (*d & PTE_V)) continue;
+#ifdef RISCV
+                pa = PTE2PA(*pte);
+#elif defined(LOONGARCH)
+                pa = PTE2PA(*pte) | DMWIN_MASK;
+#endif
+                flags = PTE_FLAGS(*pte);
+                if ((mem = kalloc()) == 0) goto err;
+                memmove(mem, (char *)pa, PGSIZE);
+                if (mappages(new, i, PGSIZE, (uint64)mem, flags) != 0) {
+                    kfree(mem);
+                    goto err;
+                }
+            }
+        }
+    }
+
     if (myproc()->pid != 1) {
         for (i = USTACK; i < USTACK_TOP; i += PGSIZE) {
             if ((pte = walk(old, i, 0)) == 0) panic("uvmcopy: pte should exist");

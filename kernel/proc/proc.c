@@ -143,6 +143,8 @@ found:
     p->clear_child_tid = 0;
     p->robust_list_head = 0;
     p->heap_start = 0;
+    p->interp_start = 0;
+    p->interp_end = 0;
     p->pt_shared = 0;
     p->tg_shared = 0;
     p->uid = 0;
@@ -226,8 +228,12 @@ static void freeproc(struct proc *p) {
     // flush any buffered console output (last line may not end with \n)
     console_flush(p);
 
-    if (p->pagetable && !p->pt_shared)
+    if (p->pagetable && !p->pt_shared) {
+        if (p->interp_end > p->interp_start)
+            uvmunmap(p->pagetable, p->interp_start,
+                     (p->interp_end - p->interp_start + PGSIZE - 1) / PGSIZE, 1);
         proc_freepagetable(p->pagetable, p->sz);
+    }
     p->pagetable = 0;
     p->sz = 0;
     p->pid = 0;
@@ -430,6 +436,8 @@ int fork(void) {
     }
     np->sz = p->sz;
     np->heap_start = p->heap_start;
+    np->interp_start = p->interp_start;
+    np->interp_end = p->interp_end;
 
     // copy saved user registers.
     *(np->trapframe) = *(p->trapframe);
@@ -501,6 +509,8 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
         np->pagetable = p->pagetable;
         np->sz = p->sz;
         np->heap_start = p->heap_start;
+        np->interp_start = p->interp_start;
+        np->interp_end = p->interp_end;
         np->pt_shared = 1;
     } else {
         if (uvmcopy(p->pagetable, np->pagetable, p->sz) < 0) {
@@ -510,6 +520,8 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
         }
         np->sz = p->sz;
         np->heap_start = p->heap_start;
+        np->interp_start = p->interp_start;
+        np->interp_end = p->interp_end;
     }
 
     // Copy saved user registers.
