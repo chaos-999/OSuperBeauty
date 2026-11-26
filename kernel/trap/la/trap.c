@@ -42,7 +42,8 @@ void trapinit(void) {
 }
 
 struct vma *findvma(struct proc *p, uint64 va) {
-    for (int i = 0; i < NVMA; i++) {
+    p = proc_vma_owner(p);
+    for (int i = 0; i < p->vma_n; i++) {
         struct vma *vv = &p->vmas[i];
         if (vv->valid == 1 && va >= vv->addr && va < vv->addr + vv->length) {
             return vv;
@@ -55,11 +56,28 @@ int vmatrylazytouch(uint64 va) {
     struct proc *p = myproc();
     struct vma *v = findvma(p, va);
     // printf("before judge vma\n");
-    if (v == 0) return 0;
+    if (v == 0) {
+        /* Defensive demand-zero page for a hole in the brk heap. */
+        struct proc *owner = proc_vma_owner(p);
+        if (owner->heap_start == 0 || va < owner->heap_start || va >= owner->sz) return 0;
+        void *pa = kalloc();
+        if (pa == NULL) return 0;
+        memset(pa, 0, PGSIZE);
+#if defined(LOONGARCH) && defined(LA2K1000)
+        int perm = PTE_P | PTE_PLV | PTE_W | PTE_MAT | PTE_D;
+#else
+        int perm = PTE_U | PTE_MAT | PTE_P | PTE_D | PTE_W;
+#endif
+        if (mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)pa, perm) != 0) {
+            kfree(pa);
+            return 0;
+        }
+        return 1;
+    }
     // printf("after judge vma\n");
 
     void *pa = kalloc();
-    if (pa == NULL) panic("vmalazytouch : kalloc");
+    if (pa == NULL) return 0;
     memset(pa, 0, PGSIZE);
 
     uint64 va_aligned = PGROUNDDOWN(va);
@@ -93,7 +111,6 @@ int vmatrylazytouch(uint64 va) {
         kfree(pa);
         return 0;
     }
-
     return 1;
 }
 
@@ -270,7 +287,8 @@ void usertrap(void) {
         // Page fault: Load/Store page invalid -> lazy alloc
         uint64 va = r_csr_badv();
         if (!vmatrylazytouch(va)) {
-            printf("vma lazy touch failed\n");
+            printf("vma lazy touch failed: badv=%lx era=%lx pid=%d tid=%d\n",
+                   va, r_csr_era(), p->pid, p->tid);
             goto unexpected_scause;
         }
     }
@@ -353,6 +371,27 @@ void usertrapret(void) {
 
     // send syscalls, interrupts, and exceptions to uservec.S
     w_csr_eentry((uint64)uservec);
+
+    /*
+     * Threads created with CLONE_VM share the parent's page table, so the
+     * TRAPFRAME slot may still point at another thread's trapframe.  Point it
+     * at this proc's own trapframe before user registers are saved/restored.
+     */
+    /*
+     * Threads created with CLONE_VM share the parent's page table, so the
+     * TRAPFRAME slot may still point at another thread's trapframe.  Point it
+     * at this proc's own trapframe before user registers are saved/restored.
+     */
+    if (p->tg_shared) {
+        pte_t *tfpte = walk(p->pagetable, TRAPFRAME, 0);
+        if (tfpte && PTE2PA(*tfpte) != (uint64)p->trapframe) {
+#ifdef LA2K1000
+            *tfpte = PA2PTE((uint64)p->trapframe) | PTE_P | PTE_W | PTE_MAT | PTE_D | PTE_U | PTE_V;
+#else
+            *tfpte = PA2PTE((uint64)p->trapframe) | PTE_NX | PTE_P | PTE_W | PTE_MAT | PTE_D | PTE_V;
+#endif
+        }
+    }
 
     // set up trapframe values that uservec will need when
     // the process next re-enters the kernel.

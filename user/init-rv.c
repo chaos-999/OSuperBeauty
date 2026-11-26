@@ -24,7 +24,6 @@ char *env_testcode[10] = {"busybox", "env", NULL};
 char *printenv_testcode[10] = {"busybox", "printenv", NULL};
 char *git_testcode[10] = {"busybox", "sh", "git_testcode.sh", NULL};
 char *lua_testcode[10] = {"busybox", "sh", "lua_testcode.sh", NULL};
-char *libcbench_testcode[10] = {"busybox", "sh", "libcbench_testcode.sh", NULL};
 char *libctest_testcode[10] = {"busybox", "sh", "libctest_testcode.sh", NULL};
 
 // char *basic_name[] = {"pipe"};
@@ -41,6 +40,24 @@ char *copy_file_range_name[] = {"copy-file-range-test-1", "copy-file-range-test-
                                 "copy-file-range-test-3", "copy-file-range-test-4"};
 
 
+
+
+/* ---------------------------------------------------------------- */
+/* Optional high-value suites appended after the original groups:    */
+/* libcbench (both libcs) and a small real LTP subset.               */
+/* ---------------------------------------------------------------- */
+
+static void run_libcbench_group(const char *dir, const char *script) {
+    if (chdir(dir) < 0) return;
+    char *av[] = {"busybox", "ash", (char *)script, 0};
+    int pid = fork();
+    if (pid == 0) {
+        execve("busybox", av, NULL);
+        exit(1);
+    } else if (pid > 0) {
+        wait(0);
+    }
+}
 
 void test_pre() {
     int pid;
@@ -193,31 +210,11 @@ void test_pre() {
     // }
     // printf("#### OS COMP TEST GROUP END libctest-musl ####\n");
 
-    
-    // ==========================================
-    // libcbench (appended; existing order untouched)
-    // ==========================================
-    chdir(bb_path_glibc);
-    pid = fork();
-    if (pid == 0) {
-        execve("busybox", libcbench_testcode, NULL);
-        printf("init: exec libcbench-glibc failed\n");
-        exit(1);
-    } else if (pid > 0) {
-        wait(0);
-    }
+    chdir("/");
+    run_libcbench_group("/glibc", "libcbench_testcode.sh");
+    run_libcbench_group("/musl", "libcbench_testcode.sh");
 
-    chdir(bb_path_musl);
-    pid = fork();
-    if (pid == 0) {
-        execve("busybox", libcbench_testcode, NULL);
-        printf("init: exec libcbench-musl failed\n");
-        exit(1);
-    } else if (pid > 0) {
-        wait(0);
-    }
     return;
-
 }
 
 
@@ -298,6 +295,10 @@ int main() {
 
     // --- 创建 /tmp 目录 ---
     mkdirat(AT_FDCWD, "/tmp", 0777);
+    mkdirat(AT_FDCWD, "/lib", 0755);
+    linkat(AT_FDCWD, "/musl/lib/libc.so", AT_FDCWD,
+           "/lib/ld-musl-riscv64.so.1", 0);
+
     mkdirat(AT_FDCWD, "/proc", 0755);
     int fd = openat(AT_FDCWD, "/proc/uptime", O_CREAT | O_WRONLY, 0644);
     if (fd >= 0) {

@@ -604,8 +604,12 @@ int ext4_dir_try_insert_entry(struct ext4_sblock *sb,
 		uint8_t itype = ext4_dir_en_get_inode_type(sb, start);
 
 		/*
-		 * Guard against corrupted / over-merged directory entries:
-		 * rec_len must cover the header and stay inside the block.
+		 * Guard against corrupted / over-merged directory entries.
+		 * A zero or out-of-block rec_len would make the walk loop
+		 * forever or step past the block; a rec_len smaller than the
+		 * entry header + name makes free_space below underflow and was
+		 * the cause of the ext4_dir_write_entry() assert at line 304
+		 * after a large unlinked tmpfile was removed (rec_len merging).
 		 */
 		if (rec_len < sizeof(struct ext4_fake_dir_entry) ||
 		    (uint8_t *)start + rec_len > (uint8_t *)stop)

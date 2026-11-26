@@ -23,6 +23,9 @@
 #define LOONGARCH_CSR_PRCFG3 0x23 /* Config3 */
 
 #define LOONGARCH_CSR_SAVE0 0x30 /* Kscratch registers */
+#define LOONGARCH_CSR_SAVE1 0x31
+#define LOONGARCH_CSR_TLBRELO0 0x8c /* TLB refill entry low  (even page) */
+#define LOONGARCH_CSR_TLBRELO1 0x8d /* TLB refill entry low  (odd page) */
 
 #define LOONGARCH_CSR_TID 0x40  /* Timer ID */
 #define LOONGARCH_CSR_TCFG 0x41 /* Timer config */

@@ -6,6 +6,12 @@
 
 #define DIRSIZ 50
 #define ROOTINO 1  // root i-number
+/*
+ * Block-device sector size.  The contest ext4 images use a 4096-byte block
+ * size, so matching the device block size to it makes every lwext4 block
+ * operation a single virtio request instead of eight.  libcbench's stdio
+ * test (5M putc + 5M getc) is dominated by these requests.
+ */
 #define BSIZE 4096
 #define CONSOLE 1
 

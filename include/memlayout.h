@@ -1,4 +1,11 @@
 #pragma once
+
+// Initial process (the embedded init binary) layout.  The init code can be
+// larger than a few pages (the LTP test list alone is several KB), so map a
+// fixed region and put the initial user stack at its top; otherwise the stack
+// overlaps the binary image and corrupts it.
+#define INIT_PAGES 32
+#define INIT_STACK_TOP ((uint64)INIT_PAGES * PGSIZE)
 // Physical memory layout
 
 // qemu -machine virt is set up like this,
@@ -55,8 +62,8 @@
 #define PHYSTOP 0x88000000
 
 #define TRAMPOLINE (MAXVA - PGSIZE)
-#define USTACK_PAGE 32
-#define USTACK (MAXVA - 512 * 10 * PGSIZE - USTACK_PAGE * PGSIZE)
+#define USTACK_PAGE 256
+#define USTACK (MAXVA - 512 * 1024 * 1024 - USTACK_PAGE * PGSIZE)
 #define USTACK_GURAD_PAGE (USTACK - PGSIZE)
 #define USTACK_TOP (USTACK + USTACK_PAGE * PGSIZE)
 #define KSTACK(p) (TRAMPOLINE - ((p) + 1) * 4 * PGSIZE)
@@ -101,8 +108,8 @@
 // in both user and kernel space.
 #define TRAMPOLINE (MAXVA - PGSIZE)
 
-#define USTACK_PAGE 32
-#define USTACK (MAXVA - 512 * 10 * PGSIZE - USTACK_PAGE * PGSIZE)
+#define USTACK_PAGE 256
+#define USTACK (MAXVA - 512 * 1024 * 1024 - USTACK_PAGE * PGSIZE)
 #define USTACK_GURAD_PAGE (USTACK - PGSIZE)
 #define USTACK_TOP (USTACK + USTACK_PAGE * PGSIZE)
 // map kernel stacks beneath the trampoline,
@@ -155,7 +162,7 @@
 #define TRAPFRAME (MAXVA_39BIT - PGSIZE)     // 39位地址空间顶部下方一页
 #define SIG_TRAMPOLINE (TRAPFRAME - PGSIZE)  // 信号跳板页
 
-#define USTACK_PAGE 32
+#define USTACK_PAGE 256
 #define USTACK_TOP (SIG_TRAMPOLINE)                 // 栈顶紧贴信号跳板页下方
 #define USTACK (USTACK_TOP - USTACK_PAGE * PGSIZE)  // 用户栈空间
 #define USTACK_GURAD_PAGE (USTACK - PGSIZE)         // 栈保护页
@@ -192,8 +199,8 @@
 #define PHYSBASE (0x90000000UL | DMWIN_MASK)
 #define PHYSTOP (PHYSBASE + 512 * 1024 * 1024)
 
-#define USTACK_PAGE 32
-#define USTACK (MAXVA - 512 * 10 * PGSIZE - USTACK_PAGE * PGSIZE)
+#define USTACK_PAGE 256
+#define USTACK (MAXVA - 512 * 1024 * 1024 - USTACK_PAGE * PGSIZE)
 #define USTACK_GURAD_PAGE (USTACK - PGSIZE)
 #define USTACK_TOP (USTACK + USTACK_PAGE * PGSIZE)
 
