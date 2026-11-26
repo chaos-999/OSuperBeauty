@@ -132,6 +132,34 @@ static void run_ltp_dir(const char *dir, const char *group) {
     printf("#### OS COMP TEST GROUP END %s ####\n", group);
 }
 
+
+static const char *lua_scripts[] = {"date.lua", "file_io.lua", "max_min.lua", "random.lua",
+                                    "remove.lua", "round_num.lua", "sin30.lua", "sort.lua",
+                                    "strings.lua"};
+
+static void run_lua_group(const char *dir, const char *group) {
+    printf("#### OS COMP TEST GROUP START %s ####\n", group);
+    if (chdir(dir) < 0) {
+        printf("#### OS COMP TEST GROUP END %s ####\n", group);
+        return;
+    }
+    int n = (int)(sizeof(lua_scripts) / sizeof(lua_scripts[0]));
+    for (int i = 0; i < n; i++) {
+        int pid = fork();
+        if (pid == 0) {
+            char *av[] = {"lua", (char *)lua_scripts[i], 0};
+            execve("lua", av, 0);
+            exit(1);
+        }
+        int st = 0;
+        if (pid > 0) wait(&st);
+        printf("testcase lua %s %s\n", lua_scripts[i],
+               (pid > 0 && (st & 0xff) == 0) ? "success" : "fail");
+    }
+    chdir("/");
+    printf("#### OS COMP TEST GROUP END %s ####\n", group);
+}
+
 void test_pre() {
     int pid;
 
@@ -282,6 +310,8 @@ void test_pre() {
     chdir("/");
     run_libcbench_group("/glibc", "libcbench_testcode.sh");
     run_libcbench_group("/musl", "libcbench_testcode.sh");
+    run_lua_group("/musl", "lua-musl");
+    run_lua_group("/glibc", "lua-glibc");
     run_ltp_dir("/musl/ltp/testcases/bin", "ltp-musl");
 
     return;
