@@ -180,6 +180,13 @@ static int ext4_dir_iterator_set(struct ext4_dir_iter *it,
 	if (off_in_block + length > block_size)
 		return EIO;
 
+	/* A directory entry is at least 8 bytes (inode+rec_len+name_len+type).
+	 * A corrupted (e.g. zero) rec_len would otherwise pass the next check
+	 * via unsigned underflow and make ext4_dir_iterator_next() spin forever
+	 * (skip == 0 keeps seeking to the same offset). */
+	if (length < 8)
+		return EIO;
+
 	/* Ensure the name length is not too large */
 	if (ext4_dir_en_get_name_len(sb, en) > length - 8)
 		return EIO;

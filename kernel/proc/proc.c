@@ -512,6 +512,15 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
         np->interp_start = p->interp_start;
         np->interp_end = p->interp_end;
         np->pt_shared = 1;
+        /*
+         * CLONE_VM shares the page table, so the shared TRAPFRAME slot must
+         * be re-pointed at whichever proc returns next (both the child and
+         * the parent).  This was previously only done for CLONE_THREAD; a
+         * bare CLONE_VM child (LTP clone02) returned through the parent's
+         * trapframe and jumped to garbage.  Mark both sides.
+         */
+        np->tg_shared = 1;
+        p->tg_shared = 1;
     } else {
         if (uvmcopy(p->pagetable, np->pagetable, p->sz) < 0) {
             freeproc(np);
@@ -544,9 +553,6 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
         /* Threads must share the heap break, otherwise two threads calling
          * brk() map overlapping pages and mappages() panics on remap. */
         np->leader = p->leader ? p->leader : p;
-        /* Mark the whole group so every member remaps TRAPFRAME on return. */
-        np->tg_shared = 1;
-        p->tg_shared = 1;
     }
 
     // CLONE_SIGHAND: share signal handler table (increment refcount)
@@ -1058,7 +1064,10 @@ void sched(void) {
     int intena;
     struct proc *p = myproc();
     if (!holding(&p->lock)) panic("sched p->lock");
-    if (mycpu()->noff != 1) panic("sched locks");
+    if (mycpu()->noff != 1) {
+        printf("sched locks: pid=%d name=%s noff=%d state=%d\n", p->pid, p->name, mycpu()->noff, p->state);
+        panic("sched locks");
+    }
     if (p->state == RUNNING) panic("sched running");
     if (intr_get()) panic("sched interruptible");
 

@@ -58,14 +58,14 @@
 /**@brief   Mount point OS dependent lock*/
 #define EXT4_MP_LOCK(_m)                                                                                               \
     do {                                                                                                               \
-        if ((_m)->os_locks)                                                                                            \
+        if ((_m)->os_locks && (_m)->os_locks->lock)                                                                   \
             (_m)->os_locks->lock();                                                                                    \
     } while (0)
 
 /**@brief   Mount point OS dependent unlock*/
 #define EXT4_MP_UNLOCK(_m)                                                                                             \
     do {                                                                                                               \
-        if ((_m)->os_locks)                                                                                            \
+        if ((_m)->os_locks && (_m)->os_locks->unlock)                                                                 \
             (_m)->os_locks->unlock();                                                                                  \
     } while (0)
 
@@ -3016,6 +3016,19 @@ const ext4_direntry *ext4_dir_entry_next(ext4_dir *dir) {
 
     r = ext4_dir_iterator_init(&it, &dir_inode, dir->next_off);
     if (r != EOK) {
+        ext4_fs_put_inode_ref(&dir_inode);
+        goto Finish;
+    }
+
+    /*
+     * ext4_dir_iterator_init() returns EOK with it.curr == NULL when
+     * dir->next_off is already at/past the end of the directory (the
+     * "pos >= size" branch of ext4_dir_iterator_seek).  Dereferencing a
+     * NULL entry here used to fault the whole kernel: readdir() on an
+     * empty dir (LTP tst_rmdir() cleanup) is exactly that path.
+     */
+    if (it.curr == NULL) {
+        ext4_dir_iterator_fini(&it);
         ext4_fs_put_inode_ref(&dir_inode);
         goto Finish;
     }

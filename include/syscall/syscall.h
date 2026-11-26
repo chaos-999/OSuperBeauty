@@ -43,6 +43,14 @@
 #define SYS_getegid 177
 #define SYS_setreuid 145
 #define SYS_setregid 143
+#define SYS_setresuid 147
+#define SYS_getresuid 148
+#define SYS_setresgid 149
+#define SYS_getresgid 150
+#define SYS_setfsuid 151
+#define SYS_setfsgid 152
+#define SYS_getgroups 158
+#define SYS_setgroups 159
 #define SYS_nanosleep 101
 #define SYS_sched_yield 124
 #define SYS_times 153

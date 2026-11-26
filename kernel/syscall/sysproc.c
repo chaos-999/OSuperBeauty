@@ -822,6 +822,103 @@ uint64 sys_setregid(void) {
     return 0;
 }
 
+uint64 sys_setresuid(void) {
+    int ruid, euid, suid;
+    struct proc *p = myproc();
+    argint(0, &ruid);
+    argint(1, &euid);
+    argint(2, &suid);
+    acquire(&p->lock);
+    int can = (p->euid == 0);
+    if (!can) {
+        if (ruid != -1 && ruid != p->uid && ruid != p->euid && ruid != p->suid) { release(&p->lock); return -EPERM; }
+        if (euid != -1 && euid != p->uid && euid != p->euid && euid != p->suid) { release(&p->lock); return -EPERM; }
+        if (suid != -1 && suid != p->uid && suid != p->euid && suid != p->suid) { release(&p->lock); return -EPERM; }
+    }
+    if (ruid != -1) p->uid = ruid;
+    if (euid != -1) p->euid = euid;
+    if (suid != -1) p->suid = suid;
+    release(&p->lock);
+    return 0;
+}
+
+uint64 sys_getresuid(void) {
+    uint64 ruid, euid, suid;
+    struct proc *p = myproc();
+    argaddr(0, &ruid); argaddr(1, &euid); argaddr(2, &suid);
+    int r = p->uid, e = p->euid, s = p->suid;
+    if (ruid && copyout(p->pagetable, ruid, (char *)&r, sizeof(int)) < 0) return -EFAULT;
+    if (euid && copyout(p->pagetable, euid, (char *)&e, sizeof(int)) < 0) return -EFAULT;
+    if (suid && copyout(p->pagetable, suid, (char *)&s, sizeof(int)) < 0) return -EFAULT;
+    return 0;
+}
+
+uint64 sys_setresgid(void) {
+    int rgid, egid, sgid;
+    struct proc *p = myproc();
+    argint(0, &rgid);
+    argint(1, &egid);
+    argint(2, &sgid);
+    acquire(&p->lock);
+    int can = (p->euid == 0);
+    if (!can) {
+        if (rgid != -1 && rgid != p->gid && rgid != p->egid && rgid != p->sgid) { release(&p->lock); return -EPERM; }
+        if (egid != -1 && egid != p->gid && egid != p->egid && egid != p->sgid) { release(&p->lock); return -EPERM; }
+        if (sgid != -1 && sgid != p->gid && sgid != p->egid && sgid != p->sgid) { release(&p->lock); return -EPERM; }
+    }
+    if (rgid != -1) p->gid = rgid;
+    if (egid != -1) p->egid = egid;
+    if (sgid != -1) p->sgid = sgid;
+    release(&p->lock);
+    return 0;
+}
+
+uint64 sys_getresgid(void) {
+    uint64 rgid, egid, sgid;
+    struct proc *p = myproc();
+    argaddr(0, &rgid); argaddr(1, &egid); argaddr(2, &sgid);
+    int r = p->gid, e = p->egid, s = p->sgid;
+    if (rgid && copyout(p->pagetable, rgid, (char *)&r, sizeof(int)) < 0) return -EFAULT;
+    if (egid && copyout(p->pagetable, egid, (char *)&e, sizeof(int)) < 0) return -EFAULT;
+    if (sgid && copyout(p->pagetable, sgid, (char *)&s, sizeof(int)) < 0) return -EFAULT;
+    return 0;
+}
+
+uint64 sys_setfsuid(void) {
+    int fsuid;
+    argint(0, &fsuid);
+    (void)fsuid;
+    return myproc()->uid;
+}
+
+uint64 sys_setfsgid(void) {
+    int fsgid;
+    argint(0, &fsgid);
+    (void)fsgid;
+    return myproc()->gid;
+}
+
+uint64 sys_getgroups(void) {
+    int size;
+    uint64 list;
+    argint(0, &size);
+    argaddr(1, &list);
+    if (size < 0) return -EINVAL;
+    if (size == 0) return 1;  // just the primary group
+    int g = myproc()->gid;
+    if (list && copyout(myproc()->pagetable, list, (char *)&g, sizeof(int)) < 0) return -EFAULT;
+    return 1;
+}
+
+uint64 sys_setgroups(void) {
+    int size;
+    uint64 list;
+    argint(0, &size);
+    argaddr(1, &list);
+    (void)size; (void)list;
+    return 0;
+}
+
 int sys_exit_group(void) {
     int status;
 

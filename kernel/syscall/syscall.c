@@ -115,6 +115,14 @@ extern uint64 sys_statx(void);
 extern uint64 sys_set_tid_address(void);
 extern uint64 sys_getuid(void);
 extern uint64 sys_setuid(void);
+extern uint64 sys_setresuid(void);
+extern uint64 sys_getresuid(void);
+extern uint64 sys_setresgid(void);
+extern uint64 sys_getresgid(void);
+extern uint64 sys_setfsuid(void);
+extern uint64 sys_setfsgid(void);
+extern uint64 sys_getgroups(void);
+extern uint64 sys_setgroups(void);
 extern uint64 sys_getgid(void);
 extern uint64 sys_setgid(void);
 extern uint64 sys_geteuid(void);
@@ -229,6 +237,14 @@ static uint64 (*syscalls[])(void) = {
     [SYS_set_tid_address] sys_set_tid_address,
     [SYS_getuid] sys_getuid,
     [SYS_setuid] sys_setuid,
+    [SYS_setresuid] sys_setresuid,
+    [SYS_getresuid] sys_getresuid,
+    [SYS_setresgid] sys_setresgid,
+    [SYS_getresgid] sys_getresgid,
+    [SYS_setfsuid] sys_setfsuid,
+    [SYS_setfsgid] sys_setfsgid,
+    [SYS_getgroups] sys_getgroups,
+    [SYS_setgroups] sys_setgroups,
     [SYS_getgid] sys_getgid,
     [SYS_setgid] sys_setgid,
     [SYS_geteuid] sys_geteuid,

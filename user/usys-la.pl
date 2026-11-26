@@ -91,6 +91,7 @@ entry("ioctl");
 entry("syslog");
 entry("faccessat");
 entry("sysinfo");
+entry("nanosleep");
 entry("clock_nanosleep");
 entry("copy_file_range");
 entry("ftruncate");
