@@ -6,7 +6,7 @@
 
 #define DIRSIZ 50
 #define ROOTINO 1  // root i-number
-#define BSIZE 512
+#define BSIZE 4096
 #define CONSOLE 1
 
 typedef enum {

@@ -19,6 +19,7 @@ char *bb_testcode[10] = {"busybox", "ash", "busybox_testcode.sh", NULL};
 char *interrupts_testcode[10] = {"busybox", "sh", "interrupts_testcode.sh", NULL};
 char *git_testcode[10] = {"busybox", "sh", "git_testcode.sh", NULL};
 char *lua_testcode[10] = {"busybox", "sh", "lua_testcode.sh", NULL};
+char *libcbench_testcode[10] = {"busybox", "sh", "libcbench_testcode.sh", NULL};
 char *libctest_testcode[10] = {"busybox", "ash", "libctest_testcode.sh", NULL};
 // char *busybox_echo_testcode[10] = {
 //     "busybox", "sh", "-c", "echo \"hello world\" > README.md", NULL
@@ -187,7 +188,30 @@ void test_pre() {
     // printf("#### OS COMP TEST GROUP END libctest-musl ####\n");
 
 
-}
+
+
+    // ==========================================
+    // libcbench (appended; existing order untouched)
+    // ==========================================
+    chdir(bb_path_glibc);
+    pid = fork();
+    if (pid == 0) {
+        execve("busybox", libcbench_testcode, NULL);
+        printf("init: exec libcbench-glibc failed\n");
+        exit(1);
+    } else if (pid > 0) {
+        wait(0);
+    }
+
+    chdir(bb_path_musl);
+    pid = fork();
+    if (pid == 0) {
+        execve("busybox", libcbench_testcode, NULL);
+        printf("init: exec libcbench-musl failed\n");
+        exit(1);
+    } else if (pid > 0) {
+        wait(0);
+    }}
 
 void test_final() {
     int pid;

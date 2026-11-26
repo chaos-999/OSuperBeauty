@@ -102,7 +102,8 @@ int filestat(struct file *f, uint64 addr) {
     struct proc *p = myproc();
     struct kstat st;
     // Special system files without ext4 backing
-    if (f->f_extfile == NULL) {
+    if (f->f_extfile == NULL ||
+        ((struct ext4_file *)f->f_extfile)->mp == NULL) {
         memset(&st, 0, sizeof(st));
         st.st_dev = 0;
         st.st_ino = 1;
@@ -120,8 +121,11 @@ int filestat(struct file *f, uint64 addr) {
         if (copyout(p->pagetable, addr, (char *)(&st), sizeof(st)) < 0) return -1;
         return 0;
     }
-    // Use path-based stat so it works for both files and directories
-    if (vfs_ext_stat(f->f_path, &st) < 0) {
+    /*
+     * Use the inode behind the open file: tmpfile() unlinks immediately,
+     * so a path-based stat fails and stdio falls back to unbuffered I/O.
+     */
+    if (vfs_ext_fstat(f, &st) < 0) {
         return -1;
     }
     if (copyout(p->pagetable, addr, (char *)(&st), sizeof(st)) < 0) return -1;
