@@ -99,7 +99,6 @@ entry("splice");
 entry("fchmodat");
 entry("symlinkat");
 entry("fsync");
-entry("sync");
 entry("fdatasync");
 entry("fchownat");
 entry("fchown");

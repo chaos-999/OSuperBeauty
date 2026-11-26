@@ -186,7 +186,6 @@ extern uint64 sys_ftruncate(void);
 extern uint64 sys_splice(void);
 extern uint64 sys_symlinkat(void);
 extern uint64 sys_fsync(void);
-extern uint64 sys_sync(void);
 extern uint64 sys_fdatasync(void);
 
 // An array mapping syscall numbers from syscall.h
@@ -293,7 +292,6 @@ static uint64 (*syscalls[])(void) = {
     [SYS_fchownat] sys_fchownat,
     [SYS_symlinkat] sys_symlinkat,
     [SYS_fsync] sys_fsync,
-    [SYS_sync] sys_sync,
     [SYS_fdatasync] sys_fdatasync,
 [SYS_preadv] sys_preadv,
     [SYS_pwritev] sys_pwritev,
