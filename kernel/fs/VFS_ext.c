@@ -563,6 +563,12 @@ int vfs_ext_dirclose(struct file *f) {
         // Handle special system files without ext4 backing
         return 0;
     }
+    if (!ext4_file_live(dir)) {
+        /* Already closed through another reference; closing again makes
+         * lwext4's ext4_assert(mp) spin forever. */
+        f->f_extfile = NULL;
+        return 0;
+    }
     ext4_ev_log(4, ext4_dir_slot(dir), f->f_path);
     int r = ext4_dir_close(dir);
     if (r != EOK) {
@@ -578,6 +584,13 @@ int vfs_ext_fclose(struct file *f) {
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     if (file == NULL) {
         // Handle special system files without ext4 backing
+        return 0;
+    }
+    if (!ext4_file_live(file)) {
+        /* Stale handle: the ext4_file slot was already released.  Calling
+         * ext4_fclose() again hits ext4_assert(file->mp) which loops
+         * forever (seen in readahead02 after a child/leftover close). */
+        f->f_extfile = NULL;
         return 0;
     }
     ext4_ev_log(2, ext4_file_slot(file), f->f_path);

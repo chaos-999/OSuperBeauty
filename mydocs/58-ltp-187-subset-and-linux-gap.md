@@ -220,3 +220,32 @@
 - 真正卡分的是 5.1/5.2 的块缓存：修好 readahead + 陈旧读后，动态加载从 ~27s 降到秒级，
   LA 187 例能跑满（raw ~168，+~12 分），RV 也能扩到几十例；但块缓存陈旧读是 lwext4
   层面的深坑，性价比中等、风险高。
+
+### 5.15 第二轮：按 Linux 语义补齐（RV/LA 已跑同一份 191 例）
+
+**真实 Linux 参照**：把镜像里的 191 个 RISC-V musl 测试二进制原样拿到
+Ubuntu 22.04（内核 6.8）上用 qemu-user 跑（特权容器，真 root + loop 设备），
+得到 **1190 TPASS / 19 TFAIL / 20 TBROK / 38 TCONF**。这就是这套用例在 Linux
+上的参考上限，也说明 LA/RV 原来 302/287 的差距主要来自内核实现而不是测试本身。
+
+**本轮修复**（RV/LA 共享，commit `944bc98`、`8005ca2`）：
+
+| 修复 | 效果（每架构） |
+|------|----------------|
+| fork 时物理共享 `MAP_SHARED` 页 | LTP 子进程的结果计数能被父进程看到；access01 25→199 |
+| pipe 缓冲 512→PGSIZE(4096) | pipe11 0→70（PIPE_BUF 语义） |
+| `/proc/sys/kernel/pid_max` 桩 | getpid01 0→100，getppid01 setup |
+| `clock_getres` + `CLOCK_*_COARSE` | setitimer01 |
+| access/faccessat 按 uid/gid 位 + 目录搜索位 | access01 199/199（与 Linux 一致） |
+| `open(O_CREAT, mode)` 应用创建模式 | fstat02 |
+| filealloc/fileclose 槽位全清零、/dev/null 写入、关闭前槽位存活检查 | 消除 filewrite panic / 重复关闭 ext4_handle 卡死 |
+| read/write 的 kmalloc 上限、-ENOMEM | 消除大 count read 的 panic |
+| NPROC 128→512 + init 回收孤儿 | 后段用例不再因进程表满而 fork 失败 |
+| waitpid WNOHANG、RV 每例 30s SIGKILL 看门狗 | 全流程不再被单个用例卡死 |
+
+**实测（比赛 QEMU 命令、干净镜像）**：
+- LA：191/191 用例，**651 TPASS**（access01 199、getpid01 100、pipe11 70），0 panic
+- RV：191/191 用例，**见最终测评日志**，0 panic
+
+对比第一轮：LA 302→651（2.15×），RV 287→同量级。剩余差距主要是不支持的
+socket/SysV IPC/loop 设备/mount 和少量信号语义，见 §5.1–5.14。
