@@ -66,6 +66,13 @@ struct iovec {
 void fileinit(void);
 struct ext4_dir *alloc_ext4_dir(void);
 struct ext4_file *alloc_ext4_file(void);
+void ext4_ev_log(int type, int slot, const char *path);
+void ext4_ev_dump(void);
+int ext4_file_slot(void *p);
+int ext4_file_live(void *p);
+int ext4_dir_slot(void *p);
+int ext4_file_refs(void *p);
+int ext4_ptr_ok(void *p);
 void free_ext4_dir(struct ext4_dir *dir);
 void free_ext4_file(struct ext4_file *file);
 struct file_operations *get_fops();

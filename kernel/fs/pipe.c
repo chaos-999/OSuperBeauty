@@ -9,11 +9,11 @@
 #include "errno.h"
 #include "signal.h"
 
-#define PIPESIZE 512
+#define PIPESIZE PGSIZE
 
 struct pipe {
     struct spinlock lock;
-    char data[PIPESIZE];
+    char *data;    /* one PGSIZE buffer, allocated in pipealloc() */
     uint nread;     // number of bytes read
     uint nwrite;    // number of bytes written
     int readopen;   // read fd is still open
@@ -27,6 +27,11 @@ int pipealloc(struct file **f0, struct file **f1) {
     *f0 = *f1 = 0;
     if ((*f0 = filealloc()) == 0 || (*f1 = filealloc()) == 0) goto bad;
     if ((pi = (struct pipe *)kalloc()) == 0) goto bad;
+    if ((pi->data = kalloc()) == 0) {
+        kfree((char *)pi);
+        pi = 0;
+        goto bad;
+    }
     pi->readopen = 1;
     pi->writeopen = 1;
     pi->nwrite = 0;
@@ -58,6 +63,7 @@ void pipeclose(struct pipe *pi, int writable) {
     }
     if (pi->readopen == 0 && pi->writeopen == 0) {
         release(&pi->lock);
+        kfree(pi->data);
         kfree((char *)pi);
     } else
         release(&pi->lock);

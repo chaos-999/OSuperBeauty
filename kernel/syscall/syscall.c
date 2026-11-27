@@ -146,6 +146,7 @@ extern uint64 sys_writev(void);
 extern uint64 sys_set_robust_list(void);
 extern uint64 sys_readlinkat(void);
 extern uint64 sys_clock_gettime(void);
+extern uint64 sys_clock_getres(void);
 extern uint64 sys_prlimit64(void);
 extern uint64 sys_getrandom(void);
 extern uint64 sys_fstatat(void);
@@ -269,6 +270,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_set_robust_list] sys_set_robust_list,
     [SYS_readlinkat] sys_readlinkat,
     [SYS_clock_gettime] sys_clock_gettime,
+    [SYS_clock_getres] sys_clock_getres,
     [SYS_prlimit64] sys_prlimit64,
     [SYS_getrandom] sys_getrandom,
     [SYS_fstatat] sys_fstatat,

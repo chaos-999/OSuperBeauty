@@ -34,6 +34,82 @@ struct {
     int valid[NFILE];
 } ext4_file_table;
 
+/* ---- ext4 slot lifecycle diagnostics (temporary) ---- */
+#define EXT4_EV_N 128
+struct ext4_ev {
+    int type;   /* 1=alloc_file 2=free_file 3=alloc_dir 4=free_dir 5=bad_write 6=bad_read */
+    int slot;
+    int pid;
+    char path[72];
+};
+static struct ext4_ev ext4_evq[EXT4_EV_N];
+static int ext4_evi;
+
+void ext4_ev_log(int type, int slot, const char *path) {
+    struct ext4_ev *e = &ext4_evq[ext4_evi++ % EXT4_EV_N];
+    e->type = type;
+    e->slot = slot;
+    e->pid = myproc() ? myproc()->pid : -1;
+    if (path) {
+        strncpy(e->path, path, sizeof(e->path) - 1);
+        e->path[sizeof(e->path) - 1] = 0;
+    } else {
+        e->path[0] = 0;
+    }
+}
+
+void ext4_ev_dump(void) {
+    printf("---- ext4 slot event history (last %d) ----\n", EXT4_EV_N);
+    for (int i = 0; i < EXT4_EV_N; i++) {
+        struct ext4_ev *e = &ext4_evq[(ext4_evi + i) % EXT4_EV_N];
+        if (e->type == 0)
+            continue;
+        printf("ev t=%d slot=%d pid=%d path=%s\n", e->type, e->slot, e->pid, e->path);
+    }
+}
+
+int ext4_file_slot(void *p) {
+    if (!p) return -1;
+    for (int i = 0; i < NFILE; i++)
+        if (p == &ext4_file_table.file[i]) return i;
+    return -1;
+}
+
+int ext4_dir_slot(void *p) {
+    if (!p) return -1;
+    for (int i = 0; i < NFILE; i++)
+        if (p == &ext4_dir_table.dir[i]) return i;
+    return -1;
+}
+
+int ext4_file_live(void *p) {
+    int i = ext4_file_slot(p);
+    if (i >= 0) return ext4_file_table.valid[i];
+    i = ext4_dir_slot(p);
+    if (i >= 0) return ext4_dir_table.valid[i];
+    return 0;
+}
+
+int ext4_file_refs(void *p) {
+    int n = 0;
+    for (struct file *g = ftable.file; g < ftable.file + NFILE; g++)
+        if (g->f_count > 0 && g->f_extfile == p) n++;
+    return n;
+}
+
+/* Is this a plausible kernel pointer for a mountpoint? */
+int ext4_ptr_ok(void *p) {
+    uint64 v = (uint64)p;
+#if defined(LOONGARCH)
+    /* LoongArch kernel pointers live in the DMWIN window (top nibble 0x9). */
+    if ((v >> 60) != 0x9ULL) return 0;
+    v &= 0x0FFFFFFFFFFFFFFFULL;
+    return v >= 0x80000000ULL && v < 0xC0000000ULL;
+#else
+    return v >= 0x80000000ULL && v < 0x90000000ULL;
+#endif
+}
+
 /* Allocate a file structure. */
 struct file *filealloc(void) {
     struct file *f;
@@ -41,6 +117,25 @@ struct file *filealloc(void) {
     acquire(&ftable.lock);
     for (f = ftable.file; f < ftable.file + NFILE; f++) {
         if (f->f_count == 0) {
+            /*
+             * Reset every per-open field.  A closed slot used to keep the
+             * previous owner's f_type/f_extfile/f_pipe; if the next open
+             * failed before initialising them (e.g. ENOENT in sys_openat),
+             * fileclose() saw the stale type and closed *another* file's
+             * ext4 handle or pipe.  That corrupted unrelated live files
+             * (ext4_assert(file->mp), bogus f_type on later writev).
+             */
+            f->f_type = FD_NONE;
+            f->f_mode = 0;
+            f->f_flags = 0;
+            f->f_pos = 0;
+            f->f_major = 0;
+            f->f_pipe = 0;
+            f->f_extfile = 0;
+            f->private_data = 0;
+            f->f_ip = 0;
+            f->f_owner = 0;
+            f->removed = 0;
             f->f_count = 1;
             release(&ftable.lock);
             return f;
@@ -75,6 +170,8 @@ void fileclose(struct file *f) {
     ff = *f;
     f->f_count = 0;
     f->f_type = FD_NONE;
+    f->f_extfile = 0;
+    f->f_pipe = 0;
     f->removed = 0;
     release(&ftable.lock);
 
@@ -273,6 +370,8 @@ int fileread(struct file *f, uint64 addr, int n) {
                       "nobody:x:65534:65534:nobody:/nonexistent:/bin/false\n";
         } else if (strcmp(f->f_path, "/etc/group") == 0) {
             content = "root:x:0:\nnogroup:x:65534:\nnobody:x:65534:\n";
+        } else if (strcmp(f->f_path, "/proc/sys/kernel/pid_max") == 0) {
+            content = "32768\n";
         }
         if (content == 0) {
             return 0; /* EOF, e.g. /dev/null */
@@ -342,8 +441,21 @@ int filewrite(struct file *f, uint64 addr, int n) {
         // printf("filewrite: device write returned %d\n", ret);
     } else if (f->f_type == FD_REG) {
         ret = vfs_ext_write(f, 1, addr, n);
+    } else if (f->f_type == 9) {
+        /*
+         * Synthetic files: /dev/null, /dev/rtc and the procfs stubs.  Reads
+         * are handled in fileread(); writes are accepted and discarded.
+         * LTP tests redirect stdio to /dev/null and musl emits the final
+         * flush with writev(), which reached the old panic("filewrite").
+         */
+        ret = n;
+    } else if (f->f_type == 8) {
+        /* /dev/zero: accept and discard writes. */
+        ret = n;
     } else {
-        panic("filewrite");
+        printf("FILEWRITE bad: f_type=%d f_mode=%x f_flags=%x pid=%d name=%s\n",
+               (int)f->f_type, f->f_mode, f->f_flags, myproc()->pid, myproc()->name);
+        return -1;
     }
 
     return ret;
@@ -442,6 +554,7 @@ void free_ext4_dir(struct ext4_dir *dir) {
     acquire(&ext4_dir_table.lock);
     for (i = 0; i < NFILE; i++) {
         if (dir == &ext4_dir_table.dir[i]) {
+            ext4_ev_log(4, i, 0);
             ext4_dir_table.valid[i] = 0;
             break;
         }
@@ -451,6 +564,7 @@ void free_ext4_dir(struct ext4_dir *dir) {
 
 void free_ext4_file(struct ext4_file *file) {
     int i;
+    ext4_ev_log(2, ext4_file_slot(file), 0);
     acquire(&ext4_file_table.lock);
     for (i = 0; i < NFILE; i++) {
         if (file == &ext4_file_table.file[i]) {

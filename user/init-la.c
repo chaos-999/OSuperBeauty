@@ -255,16 +255,29 @@ static const char *ltp_tests[] = {
 };
 #define LTP_N (int)(sizeof(ltp_tests)/sizeof(ltp_tests[0]))
 #define LTP_TIMEOUT 30
+static void ltp_out_path(char *buf, int n) {
+    const char *pre = "/tmp/ltp.";
+    int k = 0;
+    while (pre[k]) { buf[k] = pre[k]; k++; }
+    char tmp[12];
+    int t = 0;
+    if (n == 0) tmp[t++] = '0';
+    while (n > 0) { tmp[t++] = (char)('0' + (n % 10)); n /= 10; }
+    while (t > 0) buf[k++] = tmp[--t];
+    buf[k++] = '.'; buf[k++] = 'o'; buf[k++] = 'u'; buf[k++] = 't'; buf[k] = 0;
+}
 static void run_ltp_dir(const char *dir, const char *group) {
     printf("#### OS COMP TEST GROUP START %s ####\n", group);
     if (chdir(dir) < 0) { printf("#### OS COMP TEST GROUP END %s ####\n", group); return; }
     for (int i = 0; i < LTP_N; i++) {
         printf("RUN LTP CASE %s\n", ltp_tests[i]);
-        unlinkat(AT_FDCWD, "/tmp/ltp.out", 0);
+        char outpath[64];
+        ltp_out_path(outpath, i);
+        unlinkat(AT_FDCWD, outpath, 0);
         int pid = fork();
         if (pid == 0) {
             close(1); close(2);
-            int fd = open("/tmp/ltp.out", O_CREAT|O_TRUNC|O_RDWR, 0644);
+            int fd = open(outpath, O_CREAT|O_TRUNC|O_RDWR, 0644);
             if (fd >= 0) { int f2 = dup(1); (void)f2; }
             char *av[] = {(char*)ltp_tests[i], 0};
             char *ev[] = {"LD_LIBRARY_PATH=/musl/lib", 0};
@@ -274,13 +287,13 @@ static void run_ltp_dir(const char *dir, const char *group) {
         int killer = -1;
         if (pid > 0) {
             killer = fork();
-            if (killer == 0) { struct timespec wts = {LTP_TIMEOUT, 0}; nanosleep(&wts, 0); kill(pid); exit(0); }
+            if (killer == 0) { struct timespec wts = {LTP_TIMEOUT, 0}; nanosleep(&wts, 0); kill(pid, SIGKILL); exit(0); }
         }
         int st = 0;
         if (pid > 0) waitpid(pid, &st, 0);
-        if (killer > 0) { kill(killer); int kst; waitpid(killer, &kst, 0); }
+        if (killer > 0) { kill(killer, SIGKILL); int kst; waitpid(killer, &kst, 0); }
         int pass=0, fail=0, brk=0, skip=0;
-        int fd = open("/tmp/ltp.out", O_RDONLY, 0);
+        int fd = open(outpath, O_RDONLY, 0);
         if (fd >= 0) {
             static char buf[4096]; static char line[1024]; int ll=0, r;
             while ((r=read(fd, buf, sizeof(buf))) > 0) {
@@ -299,6 +312,14 @@ static void run_ltp_dir(const char *dir, const char *group) {
         }
         printf("Summary:\npassed   %d\nfailed   %d\nbroken   %d\nskipped  %d\nwarnings 0\n\n", pass, fail, brk, skip);
         printf("FAIL LTP CASE %s : %d\n", ltp_tests[i], st & 0xff);
+        /* Reap orphaned grandchildren reparented to init (pid 1): LTP tests
+         * leave processes behind and without this the 128-entry proc table
+         * fills up, fork() starts failing and later cases report 0 results. */
+        {
+            int rst;
+            while (waitpid(-1, &rst, 1) > 0)
+                ;
+        }
     }
     chdir("/");
     printf("#### OS COMP TEST GROUP END %s ####\n", group);

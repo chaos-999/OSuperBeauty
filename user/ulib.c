@@ -62,7 +62,6 @@ char *gets(char *buf, int max) {
 }
 
 int open(const char *path, int flags, ...) {
-    printf("open: path=%s, flags=%d\n", path, flags);
     int mode = 0;
     if (flags & O_CREAT) {
         // Extract mode from variable arguments

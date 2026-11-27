@@ -193,14 +193,26 @@ int vfs_ext_read(struct file *f, int user_addr, const uint64 addr, int n) {
     uint64 byteread = 0;
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     if (file == NULL) {
-        return -EBADF;  // 非 ext4 文件或无底层结构
+        return -EBADF;
+    }
+    if (!ext4_ptr_ok(file->mp) || !ext4_file_live(file)) {
+        ext4_ev_log(6, ext4_file_slot(file), f->f_path);
+        printf("BADREAD slot=%d file=%p mp=%p path=%s pid=%d name=%s\n",
+               ext4_file_slot(file), file, file->mp, f->f_path, myproc()->pid, myproc()->name);
+        ext4_ev_dump();
+        return -EIO;
     }
     int r = 0;
+    if (n <= 0)
+        return 0;
+    /* Reads may be short; cap the kernel bounce buffer so a huge userspace
+     * count (or an int-truncated size_t) cannot panic the kernel. */
+    if (n > 128 * 1024)
+        n = 128 * 1024;
     if (user_addr) {
         char *buf = kmalloc(n + 1);
-        if (buf == NULL) {
-            panic("vfs_ext_read: kalloc failed\n");
-        }
+        if (buf == NULL)
+            return -ENOMEM;
         r = ext4_fread(file, buf, n, &byteread);
         if (k_str_contains(f->f_path, "gitconfig") || k_str_contains(f->f_path, "/.git/config")) {
             // printf("DEBUG: vfs_ext_read path='%s' req=%d ret=%d byteread=%lu\n", f->f_path, n, r,
@@ -255,7 +267,14 @@ int vfs_ext_readat(struct file *f, int user_addr, const uint64 addr, int n, int 
     uint64 byteread = 0;
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     if (file == NULL) {
-        return -EBADF;  // 非 ext4 文件或无底层结构
+        return -EBADF;
+    }
+    if (!ext4_ptr_ok(file->mp) || !ext4_file_live(file)) {
+        ext4_ev_log(6, ext4_file_slot(file), f->f_path);
+        printf("BADREADAT slot=%d file=%p mp=%p path=%s pid=%d name=%s\n",
+               ext4_file_slot(file), file, file->mp, f->f_path, myproc()->pid, myproc()->name);
+        ext4_ev_dump();
+        return -EIO;
     }
 
     // Save original file position
@@ -269,11 +288,14 @@ int vfs_ext_readat(struct file *f, int user_addr, const uint64 addr, int n, int 
         }
         return -r;
     }
+    if (n <= 0)
+        return 0;
+    if (n > 128 * 1024)
+        n = 128 * 1024;
     if (user_addr) {
         char *buf = kmalloc(n + 1);
-        if (buf == NULL) {
-            panic("vfs_ext_read: kalloc failed\n");
-        }
+        if (buf == NULL)
+            return -ENOMEM;
         r = ext4_fread(file, buf, n, &byteread);
         // if (k_str_contains(f->f_path, "gitconfig") || k_str_contains(f->f_path, "/.git/config")
         // || k_str_contains(f->f_path, "/.git/objects/")) {
@@ -340,14 +362,24 @@ int vfs_ext_write(struct file *f, int user_addr, const uint64 addr, int n) {
     uint64 bytewrite = 0;
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     if (file == NULL) {
-        return -EBADF;  // 非 ext4 文件或无底层结构
+        return -EBADF;
+    }
+    if (!ext4_ptr_ok(file->mp) || !ext4_file_live(file)) {
+        ext4_ev_log(5, ext4_file_slot(file), f->f_path);
+        printf("BADWRITE slot=%d file=%p mp=%p path=%s pid=%d name=%s\n",
+               ext4_file_slot(file), file, file->mp, f->f_path, myproc()->pid, myproc()->name);
+        ext4_ev_dump();
+        return -EIO;
     }
     int r = 0;
+    if (n <= 0)
+        return 0;
+    if (n > 128 * 1024)
+        n = 128 * 1024;
     if (user_addr) {
         char *buf = kmalloc(n + 1);
-        if (buf == NULL) {
-            panic("vfs_ext_write: kalloc failed\n");
-        }
+        if (buf == NULL)
+            return -ENOMEM;
         if (copyin(myproc()->pagetable, buf, addr, n) != 0) {
             kfree(buf);
             return -1;
@@ -391,7 +423,14 @@ int vfs_ext_writeat(struct file *f, int user_addr, const uint64 addr, int n, int
     uint64 bytewrite = 0;
     struct ext4_file *file = (struct ext4_file *)f->f_extfile;
     if (file == NULL) {
-        return -EBADF;  // 非 ext4 文件或无底层结构
+        return -EBADF;
+    }
+    if (!ext4_ptr_ok(file->mp) || !ext4_file_live(file)) {
+        ext4_ev_log(5, ext4_file_slot(file), f->f_path);
+        printf("BADWRITEAT slot=%d file=%p mp=%p path=%s pid=%d name=%s\n",
+               ext4_file_slot(file), file, file->mp, f->f_path, myproc()->pid, myproc()->name);
+        ext4_ev_dump();
+        return -EIO;
     }
 
     // Save original file position
@@ -524,6 +563,7 @@ int vfs_ext_dirclose(struct file *f) {
         // Handle special system files without ext4 backing
         return 0;
     }
+    ext4_ev_log(4, ext4_dir_slot(dir), f->f_path);
     int r = ext4_dir_close(dir);
     if (r != EOK) {
         printf("vfs_ext_dirclose: cannot close directory\n");
@@ -540,6 +580,7 @@ int vfs_ext_fclose(struct file *f) {
         // Handle special system files without ext4 backing
         return 0;
     }
+    ext4_ev_log(2, ext4_file_slot(file), f->f_path);
     int r = ext4_fclose(file);
     if (r != EOK) {
         return -1;
@@ -566,6 +607,10 @@ int vfs_ext_openat(struct file *f) {
         if (dir == NULL) {
             return -ENOMEM;
         }
+        ext4_ev_log(3, ext4_dir_slot(dir), f->f_path);
+        if (ext4_file_refs(dir))
+            printf("EXT4 DIR DOUBLE-ALLOC slot=%d refs=%d path=%s pid=%d\n",
+                   ext4_dir_slot(dir), ext4_file_refs(dir), f->f_path, myproc()->pid);
         *dir = var.dir;
         f->f_extfile = dir;
     } else {
@@ -575,6 +620,10 @@ int vfs_ext_openat(struct file *f) {
         if (file == NULL) {
             return -ENOMEM;
         }
+        ext4_ev_log(1, ext4_file_slot(file), f->f_path);
+        if (ext4_file_refs(file))
+            printf("EXT4 FILE DOUBLE-ALLOC slot=%d refs=%d path=%s pid=%d\n",
+                   ext4_file_slot(file), ext4_file_refs(file), f->f_path, myproc()->pid);
         r = ext4_fopen2(file, f->f_path, f->f_flags);
         // printf("DEBUG: vfs_ext_openat - ext4_fopen2 returned %d for %s\n", r, f->f_path);
         if (r != EOK) {
@@ -1060,11 +1109,14 @@ ssize_t vfs_ext_readi(struct inode *self, int user_addr, uint64 addr, uint off, 
         kfree(file);
         return -1;
     }
+    if (n <= 0)
+        return 0;
+    if (n > 128 * 1024)
+        n = 128 * 1024;
     if (user_addr) {
         char *buf = kmalloc(n + 1);
-        if (buf == NULL) {
-            panic("vfs_ext_read: kalloc failed\n");
-        }
+        if (buf == NULL)
+            return -ENOMEM;
         r = ext4_fread(file, buf, n, &bytesread);
         if (r != EOK) {
             kfree(buf);

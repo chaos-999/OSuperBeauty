@@ -48,7 +48,7 @@ int pipe2(int *);
 int write(int, const void *, int);
 int read(int, void *, int);
 int close(int);
-int kill(int);
+int kill(int pid, int sig);
 int execve(const char *, char **, char **);
 int exec(const char *, char **);
 int open(const char *, int, ...);

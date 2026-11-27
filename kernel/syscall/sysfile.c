@@ -24,6 +24,8 @@
 #include "pipe.h"
 #include "errno.h"
 
+static uint64 chmod_path(const char *absolute_path, int mode);
+
 // Minimal substring check for kernel (no libc)
 static inline int k_str_contains(const char *s, const char *pat) {
     if (!s || !pat) return 0;
@@ -101,6 +103,7 @@ uint64 sys_read(void) {
     argaddr(1, &p);
     argint(2, &n);
     if (argfd(0, 0, &f) < 0) return -1;
+    if (n < 0) return -EINVAL;
     return get_fops()->read(f, p, n);
 }
 
@@ -408,7 +411,7 @@ uint64 sys_openat(void) {
         !strcmp(path, "/proc/version") || !strcmp(path, "/proc/filesystems") ||
         !strcmp(path, "/etc/passwd") || !strcmp(path, "/etc/group") ||
         !strcmp(path, "/dev/rtc") || !strcmp(path, "/dev/rtc0") || !strcmp(path, "/dev/misc/rtc") ||
-        !strcmp(path, "/dev/null")) {
+        !strcmp(path, "/dev/null") || !strcmp(path, "/proc/sys/kernel/pid_max")) {
         // sdcard doesn't have these files, we have to create them, or return dummy files instead
         if ((f = filealloc()) == NULL || (fd = fdalloc2(f, 0)) < 0) {
             return -1;
@@ -477,6 +480,11 @@ uint64 sys_openat(void) {
         }
         if (was_created) {
             ext4_owner_set(absolute_path, myproc()->euid, myproc()->egid);
+            /* open(O_CREAT, mode) must create the inode with that mode (the
+             * tests check it through fstat/access; lwext4 otherwise uses its
+             * default 0666 and e.g. fstat02 sees 0666 instead of 0644). */
+            if (omode & 0777)
+                chmod_path(absolute_path, omode & 0777);
         }
         return fd;
     }
@@ -922,59 +930,78 @@ uint64 sys_faccessat(void) {
     const char *dirpath = dirfd == AT_FDCWD ? myproc()->cwd.path : myproc()->ofile[dirfd]->f_path;
     char absolute_path[MAXPATH] = {0};
     get_absolute_path(path, dirpath, absolute_path);
-    // Minimal Linux-like behavior: if file does not exist, return -ENOENT; else check mode bits.
-    if (strcmp(myproc()->name, "git") == 0) {
-        int is_git_related =
-            (path[0] == '.') || k_str_contains(absolute_path, "/.git") ||
-            (absolute_path[0] == '/' && absolute_path[1] == 'm' && absolute_path[2] == 'u' &&
-             absolute_path[3] == 's' && absolute_path[4] == 'l' &&
-             (absolute_path[5] == '\0' || absolute_path[5] == '/'));
-        if (is_git_related) {
-            // printf("DEBUG: sys_faccessat ENTER path='%s' abs='%s' mode=0x%x flags=0x%x\n", path,
-            // absolute_path, mode, flags);
-        }
-    }
+
+    int nofollow = (flags & AT_SYMLINK_NOFOLLOW) ? 1 : 0;
+    int uid = (flags & 0x200 /* AT_EACCESS */) ? myproc()->euid : myproc()->uid;
+    int gid = (flags & 0x200 /* AT_EACCESS */) ? myproc()->egid : myproc()->gid;
+
     struct kstat st;
-    int r = vfs_ext_stat(absolute_path, &st, 0);
+    int r = vfs_ext_stat(absolute_path, &st, nofollow);
     if (r < 0) {
-        if (strcmp(myproc()->name, "git") == 0) {
-            int is_git_related =
-                (path[0] == '.') || k_str_contains(absolute_path, "/.git") ||
-                (absolute_path[0] == '/' && absolute_path[1] == 'm' && absolute_path[2] == 'u' &&
-                 absolute_path[3] == 's' && absolute_path[4] == 'l' &&
-                 (absolute_path[5] == '\0' || absolute_path[5] == '/'));
-            if (is_git_related) {
-                // printf("DEBUG: sys_faccessat STAT FAIL abs='%s' rc=%d\n", absolute_path, r);
+        return r;  /* e.g. -ENOENT */
+    }
+
+    /*
+     * Linux permission semantics:
+     *  - root: R_OK/W_OK always succeed, X_OK needs at least one x bit;
+     *  - other users: use the owner/group/other triples of the inode;
+     *  - every intermediate directory of the path must be searchable (x).
+     * The old code only OR-ed all three triples, so access01's nobody cases
+     * wrongly succeeded (directory modes 0444 still granted access).
+     */
+    if (uid == 0) {
+        if ((mode & 1) && ((st.st_mode & 0111) == 0))
+            return -EACCES;
+        return 0;
+    }
+
+    /* Walk intermediate directories: they all need x for this user. */
+    {
+        char cur[MAXPATH];
+        int len = 0, i = 0;
+        if (absolute_path[0] == '/') {
+            cur[len++] = '/';
+            i = 1;
+        }
+        while (absolute_path[i]) {
+            if (absolute_path[i] == '/') {
+                i++;
+                continue;
+            }
+            int comp_start = len;
+            while (absolute_path[i] && absolute_path[i] != '/')
+                cur[len++] = absolute_path[i++];
+            cur[len] = 0;
+            if (absolute_path[i] == '/') {
+                /* cur is an intermediate directory */
+                struct kstat dst;
+                if (vfs_ext_stat(cur, &dst, 0) < 0)
+                    return -ENOENT;
+                int dp;
+                if (uid == (int)dst.st_uid) dp = (dst.st_mode >> 6) & 7;
+                else if (gid == (int)dst.st_gid) dp = (dst.st_mode >> 3) & 7;
+                else dp = dst.st_mode & 7;
+                if ((dp & 1) == 0)
+                    return -EACCES;
+                cur[len++] = '/';
+                cur[len] = 0;
+                i++;
+            } else {
+                (void)comp_start;
             }
         }
-        return r;  // e.g. -ENOENT
     }
-    // If only F_OK requested, success
-    if ((mode & 0x7) == 0) return 0;
-    int perm = (int)(st.st_mode & 0777);
-    int ok = 1;
-    if (mode & 0x4) {  // R_OK
-        // treat any read bit as sufficient (root uid=0)
-        if ((perm & 0444) == 0) ok = 0;
-    }
-    if (mode & 0x2) {  // W_OK
-        if ((perm & 0222) == 0) ok = 0;
-    }
-    if (mode & 0x1) {  // X_OK
-        if ((perm & 0111) == 0) ok = 0;
-    }
-    if (strcmp(myproc()->name, "git") == 0) {
-        int is_git_related =
-            (path[0] == '.') || k_str_contains(absolute_path, "/.git") ||
-            (absolute_path[0] == '/' && absolute_path[1] == 'm' && absolute_path[2] == 'u' &&
-             absolute_path[3] == 's' && absolute_path[4] == 'l' &&
-             (absolute_path[5] == '\0' || absolute_path[5] == '/'));
-        if (is_git_related) {
-            // printf("DEBUG: sys_faccessat CHECK abs='%s' perm=0%o need=0x%x ok=%d\n",
-            // absolute_path, (int)(st.st_mode & 0777), (mode & 0x7), ok);
-        }
-    }
-    if (!ok) return -13;  // -EACCES
+
+    if ((mode & 7) == 0)
+        return 0;
+
+    int perm;
+    if (uid == (int)st.st_uid) perm = (st.st_mode >> 6) & 7;
+    else if (gid == (int)st.st_gid) perm = (st.st_mode >> 3) & 7;
+    else perm = st.st_mode & 7;
+
+    if ((mode & 7) & ~perm)
+        return -EACCES;
     return 0;
 }
 

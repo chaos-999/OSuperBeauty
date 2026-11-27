@@ -91,6 +91,7 @@
 
 #define SYS_readlinkat 78
 #define SYS_clock_gettime 113
+#define SYS_clock_getres 114
 #define SYS_prlimit64 261
 #define SYS_getrandom 278
 #define SYS_fstatat 79

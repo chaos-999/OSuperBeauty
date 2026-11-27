@@ -1401,16 +1401,55 @@ uint64 sys_clock_gettime(void) {
     int clockid;
     argint(0, &clockid);
     argaddr(1, &addr);
-    if (clockid == CLOCK_REALTIME) {
-        struct timespec ts;
-        uint64 timestamp = rdtime();
-        // printf("[sys_clock_gettime] timestamp: %p, ticks: %p\n", timestamp, ticks);
-        ts.tv_sec = timestamp / FREQUENCY;
-        ts.tv_nsec = (timestamp % FREQUENCY) * 1000000000 / FREQUENCY;
-        // printf("[sys_clock_gettime] sec: %d, nsec: %d\n", ts.sec, ts.nsec);
 
-        if (copyout(myproc()->pagetable, (uint64)addr, (char *)&ts, sizeof(ts)) < 0) return -EFAULT;
+    struct timespec ts;
+    switch (clockid) {
+        case CLOCK_REALTIME:
+        case CLOCK_REALTIME_COARSE:
+        case CLOCK_MONOTONIC:
+        case CLOCK_MONOTONIC_RAW:
+        case CLOCK_MONOTONIC_COARSE:
+        case CLOCK_BOOTTIME: {
+            uint64 timestamp = rdtime();
+            ts.tv_sec = timestamp / FREQUENCY;
+            ts.tv_nsec = (timestamp % FREQUENCY) * 1000000000ULL / FREQUENCY;
+            break;
+        }
+        case CLOCK_PROCESS_CPUTIME_ID:
+        case CLOCK_THREAD_CPUTIME_ID:
+            ts.tv_sec = 0;
+            ts.tv_nsec = 0;
+            break;
+        default:
+            return -EINVAL;
     }
+    if (copyout(myproc()->pagetable, (uint64)addr, (char *)&ts, sizeof(ts)) < 0) return -EFAULT;
+    return 0;
+}
+
+uint64 sys_clock_getres(void) {
+    uint64 addr;
+    int clockid;
+    argint(0, &clockid);
+    argaddr(1, &addr);
+
+    switch (clockid) {
+        case CLOCK_REALTIME:
+        case CLOCK_REALTIME_COARSE:
+        case CLOCK_MONOTONIC:
+        case CLOCK_MONOTONIC_RAW:
+        case CLOCK_MONOTONIC_COARSE:
+        case CLOCK_BOOTTIME:
+        case CLOCK_PROCESS_CPUTIME_ID:
+        case CLOCK_THREAD_CPUTIME_ID:
+            break;
+        default:
+            return -EINVAL;
+    }
+    struct timespec ts;
+    ts.tv_sec = 0;
+    ts.tv_nsec = 1000000;  /* 1 ms */
+    if (addr && copyout(myproc()->pagetable, addr, (char *)&ts, sizeof(ts)) < 0) return -EFAULT;
     return 0;
 }
 

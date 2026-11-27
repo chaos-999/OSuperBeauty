@@ -520,6 +520,24 @@ int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) {
                 flags = PTE_FLAGS(*pte);
                 pte_t *dstpte = walk(new, i, 0);
                 if (dstpte && (*dstpte & PTE_V)) continue;
+                if (v->flags & MAP_SHARED) {
+                    /*
+                     * MAP_SHARED: the child must see the parent's writes and
+                     * vice versa.  Map the same physical page in the child
+                     * instead of making a private copy.  vmaunmap() knows not
+                     * to kfree() MAP_SHARED pages, so the frame is shared
+                     * safely (it is leaked once both mappings are gone, which
+                     * is fine for the small IPC regions involved).
+                     *
+                     * LTP's tst_test library keeps its result counters in a
+                     * MAP_SHARED tmpfile region; without this, a child-only
+                     * result (e.g. access01 "as nobody") never reached the
+                     * parent and every such test aborted with "haven't
+                     * reported results".
+                     */
+                    if (mappages(new, i, PGSIZE, pa, flags) != 0) goto err;
+                    continue;
+                }
                 if ((mem = kalloc()) == 0) goto err;
                 memmove(mem, (char *)pa, PGSIZE);
                 if (mappages(new, i, PGSIZE, (uint64)mem, flags) != 0) {
@@ -784,7 +802,8 @@ void vmaunmap(pagetable_t pagetable, uint64 va, uint64 nbytes, struct vma *v) {
                     get_fops()->writeat(v->f, pa, PGSIZE, v->offset + aoff);
                 }
             }
-            kfree((void *)pa);
+            if (!(v->flags & MAP_SHARED))
+                kfree((void *)pa);
             *pte = 0;
         }
     }
