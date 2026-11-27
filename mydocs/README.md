@@ -59,6 +59,9 @@
 | `53-libcbench-official-eval-fixes.md` | 🔧 官方评测修复：glibc futex/BITSET、clone3、LA 页表预创建、线程组 VMA 共享、信号表泄漏、buddy 幻影尾部；lwext4 目录项修复后 RV/LA 各跑两组，judge 汇总 116.268 | 2026-11-23 |
 | `54-libcbench-performance-and-official-score.md` | ⚡ 性能修复：块设备 BSIZE=4096、VMA 高水位扫描、clone 只清理用到的 VMA 槽、Makefile 子目录 `.d` 依赖；官方 docker harness `Accpted` score **115.5–116.1**（RV 30.6+27.3，LA 28.8+28.9），整体运行时间 ~22min→~6min | 2026-11-23 |
 | `55-ltp-dynamic-loader-blocker.md` | 🧪 LTP 可行性排查：运行框架/判分格式已确认；阻塞点是镜像 LTP 二进制为动态链接，需补齐动态 ELF loader 语义（MAP_FIXED 等已实现）；libcbench 仍 115.5–116.1 | 2026-11-24 |
+| `56-libcbench-final-both-arch.md` | 🏁 libcbench 收尾：`prlimit64`（glibc 线程栈数 GB→LA OOM）与 `mmap` 取址下沉（musl TLS 落进程序镜像）两个致命修复；RV/LA、glibc/musl 四组 27/27，官方合计 ~116 | 2026-11-27 |
+| `57-lua-9-scripts-36-points.md` | 🎯 lua 测试组：镜像自带静态 lua 解释器 + 9 脚本全 success，零内核改动、RV/LA 两 libc 共 +36 分（性价比之王） | 2026-11-27 |
+| `58-ltp-187-subset-and-linux-gap.md` | 🧪 LTP 187 例（LA）+6 例（RV）跑通：判分（TPASS 对数映射）、运行框架（fork+重定向+nanosleep 看门狗）、7 个内核 bug 修复、遗留问题与 Linux 实现逐项对照（块缓存 readahead/陈旧读、pipe EPIPE、symlink、mount、getdents 损坏项） | 2026-11-27 |
 
 ## 勘误与错误方向标记
 
