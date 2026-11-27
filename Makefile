@@ -156,7 +156,7 @@ kernel-la-sh: $U/initcode-la-sh $(OBJS_LA_SH) $K/la/kernel.ld
 	$(OBJDUMP_LA) -t kernel-la-sh | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > kernel-la-sh.sym
 
 # RISC-V initcode build
-$U/initcode-rv: $U/initcode.S $U/init-rv.c $(ULIB_C_SOURCES) $(ULIB_S_SOURCES_RV)
+$U/initcode-rv: $U/initcode.S $U/init-rv.c $(ULIB_C_SOURCES) $(ULIB_S_SOURCES_RV) include/syscall/syscall.h
 	@echo "--- Building RISC-V initcode and its dependencies ---"
 	# Step 1: Compile all necessary C source files
 	$(CC_RV) $(CFLAGS_RV) -c -o $U/initcode-rv.o $U/initcode.S
@@ -175,7 +175,7 @@ $U/initcode-rv: $U/initcode.S $U/init-rv.c $(ULIB_C_SOURCES) $(ULIB_S_SOURCES_RV
 	rm -f $U/initcode-rv.out
 
 # LoongArch initcode build
-$U/initcode-la: $U/initcode-la.S $U/init-la.c $(ULIB_C_SOURCES) $(ULIB_S_SOURCES_LA)
+$U/initcode-la: $U/initcode-la.S $U/init-la.c $(ULIB_C_SOURCES) $(ULIB_S_SOURCES_LA) include/syscall/syscall.h
 	@echo "--- Building LoongArch initcode and its dependencies ---"
 	# Step 1: Compile all necessary C source files
 	$(CC_LA) $(CFLAGS_LA) -c -o $U/initcode-la.o $U/initcode-la.S
