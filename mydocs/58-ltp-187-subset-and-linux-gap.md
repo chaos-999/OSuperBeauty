@@ -249,3 +249,26 @@ Ubuntu 22.04（内核 6.8）上用 qemu-user 跑（特权容器，真 root + loo
 
 对比第一轮：LA 302→651（2.15×），RV 287→同量级。剩余差距主要是不支持的
 socket/SysV IPC/loop 设备/mount 和少量信号语义，见 §5.1–5.14。
+
+### 5.16 第三轮：busybox 回退、RV 内存上限、ext4 关闭死循环（已修）
+
+- **busybox 53→1 的回退（commit `961bb5e`）**：`6f0eb51` 让 fork 子进程继承父进程的
+  信号处理器表。busybox ash 为管道/命令替换 fork 的子 shell 继承了 ash 的 SIGCHLD
+  处理器，处理器抢先 reap 掉 applet，子 shell 的 `wait4` 得到 ECHILD，`$?` 变成
+  255，于是所有外部 applet 命令都被判 fail。回退为子进程 SIG_DFL（kill12 少 1
+  TPASS），busybox 恢复 51–53 分（共 +约 210 分）。
+- **RV 只能用 51MB 内存（commit `f09ae5a`）**：RISC-V 的 `PHYSTOP` 还是
+  `0x88000000`(128MB)，NPROC=512 后内核 BSS 到 `0x84c42000`，buddy 只管理
+  **51MB**（LA 是 512MB）。所以 pipe11 的 50 个并发 fork 在 uvmcopy/kalloc 处失败
+  （fork→EPERM，35/70），mem02 的 64MB 分配无结果。把 PHYSTOP 提到 `0xC0000000`
+  （QEMU 1G）、`MAX_BUDDY_LEVEL=18`，buddy 管理 **947MB**，pipe11 70/70。
+- **readlink01 内核死循环（commit `8ce9a03`）**：路径式 close 可能留下
+  valid=1、mp=0 的槽位，`ext4_fclose` 的 `ext4_assert(mp)` 失败路径是 `while(1)`，
+  SIGKILL 也杀不掉，整个测评卡死。关闭前同时检查槽位存活与 mp，必要时释放槽位。
+
+**最终测评（official_eval_10.log，verdict Accpted，score 1236）**：
+- LA：191/191 用例，**634 TPASS**
+- RV：191/191 用例，**630 TPASS**（差 4，0.6%）
+- busybox：LA 53/53，RV 51/53
+- 残留小差异：chmod01 受 30s 看门狗影响 LA 偶尔只跑到 16/32；confstr01(4)、
+  setitimer01(3)、prctl03/readlink01/symlink01(各2) 等 RV 单独失败。
