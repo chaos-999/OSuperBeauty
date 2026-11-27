@@ -557,6 +557,7 @@ int ext4_dir_remove_entry(struct ext4_inode_ref *parent, const char *name,
 	 */
 	if (pos != 0) {
 		uint32_t offset = 0;
+		uint32_t block_size = ext4_sb_get_block_size(sb);
 
 		/* Start from the first entry in block */
 		struct ext4_dir_en *tmp_de =(void *)result.block.data;
@@ -564,7 +565,12 @@ int ext4_dir_remove_entry(struct ext4_inode_ref *parent, const char *name,
 
 		/* Find direct predecessor of removed entry */
 		while ((offset + de_len) < pos) {
-			offset += ext4_dir_en_get_entry_len(tmp_de);
+			/* Bounds-check the walk: a zero/corrupt rec_len here would
+			 * otherwise loop forever or step past the block. */
+			if (de_len < sizeof(struct ext4_fake_dir_entry) ||
+			    offset + de_len > block_size)
+				return EIO;
+			offset += de_len;
 			tmp_de = (void *)(result.block.data + offset);
 			de_len = ext4_dir_en_get_entry_len(tmp_de);
 		}
