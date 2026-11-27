@@ -187,6 +187,20 @@
    `sys_fchown`，RV basic 组全空（分数少 ~200）。已在 Makefile 给两个 initcode 目标
    加上 `include/syscall/syscall.h` 依赖。
 
+### 5.13 RV LTP 扩容 + block cache 4096（性能根因）
+
+- 现象：RV 的 LTP 原来只挂 6 个用例，单例 ~77s，全流程 LTP 极慢；LA 191 例却只要 ~10s/例。
+- 根因（量化）：给 RV 内核加计数器后测得 **4 个用例做了 ~206,000 次磁盘 I/O**，lwext4 块缓存
+  **命中率只有 51.8%**（210877 hit / 196292 miss）。`sleep` 等待平均 **0 tick**（中断立即
+  唤醒），所以瓶颈不是 sleep，而是 **缓存太小导致 I/O 次数爆炸**。
+- 修复：`CONFIG_BLOCK_DEV_CACHE_SIZE` 1024→**4096**（4MB→16MB）。4 用例从 **323s → 37s
+  （8.8×）**，数据完全正确；`access01`（之前全流程下会自旋）也恢复正常（25 TPASS）。
+- 放弃的方案：virtio-mmio 纯轮询 used ring 虽然能到 10s，但 QEMU/TCG 下 used ring 更新早于
+  DMA 数据可见，会读到陈旧数据（已用块校验和证实），不可用。
+- RV LTP 列表从 6 → **18 个**（`brk01/pipe01/read01/write01/open01/lseek01/close01/dup01/
+  fork01/wait01/exit01/access01/uname01/times01/gettimeofday01/abort01/alarm07/atof01`），
+  实测 **52 TPASS**（原来 8）。`chmod01` 在 RV 上内核自旋（LA 上 32 TPASS），暂排除。
+
 ## 6. 结论与下一步建议
 
 - LTP 判分是「TPASS 数量」的对数映射，**多跑用例收益递减**（raw 100→18 分，500→80）。
