@@ -1873,9 +1873,19 @@ uint64 sys_mprotect(void) {
         for (int i = 0; i < vo->vma_n; i++) {
             struct vma *v = &vo->vmas[i];
             if (!v->valid) continue;
-            /* Update every overlapping VMA (a partial mprotect is allowed). */
             if (addr < v->addr + v->length && addr + len > v->addr) {
-                v->prot = prot;
+                /*
+                 * Only propagate the new protection to the VMA when the
+                 * whole VMA is covered.  A partial mprotect (e.g. disabling
+                 * a pthread stack guard page) must not clobber the rest of
+                 * the VMA: pthread_create maps a stack, then does
+                 * mprotect(stack_top, PAGE, PROT_NONE).  Setting v->prot = 0
+                 * here made the *whole* stack PROT_NONE, so the next stack
+                 * write faulted and vmatrylazytouch() could not grant W ->
+                 * infinite page-fault loop.
+                 */
+                if (addr <= v->addr && addr + len >= v->addr + v->length)
+                    v->prot = prot;
             }
         }
     }

@@ -74,6 +74,8 @@ int vmatrylazytouch(uint64 va) {
         uint64 va_aligned = PGROUNDDOWN(va);
         pte_t *pte = walk(p->pagetable, va_aligned, 0);
         if (pte && (*pte & PTE_V)) {
+            if ((v->prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) == 0)
+                return 0;  /* PROT_NONE: genuine fault, do not loop */
             if (v->prot & PROT_READ) *pte |= PTE_R;
             if (v->prot & PROT_WRITE) *pte |= PTE_W;
             if (v->prot & PROT_EXEC) *pte |= PTE_X;

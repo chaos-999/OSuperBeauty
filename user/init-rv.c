@@ -98,9 +98,8 @@ static int has_sub(const char *s, const char *t) {
 
 static const char *ltp_tests[] = {
     "brk01", "pipe01", "read01", "write01", "open01", "lseek01",
-    "close01", "dup01", "fork01", "wait01", "exit01",
-       "access01", "uname01",
-    "times01", "gettimeofday01", "abort01", "alarm07", "atof01"
+    "close01", "dup01", "fork01", "wait01", "exit01", "access01", "uname01",
+    "times01", "gettimeofday01", "abort01", "alarm07", "atof01", "chmod01"
 };
 
 static void run_ltp_dir(const char *dir, const char *group) {
