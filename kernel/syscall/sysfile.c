@@ -829,9 +829,14 @@ uint64 sys_getdents64(void) {
     return len;
 }
 
-uint64 sys_mount(void) { return 0; }
+uint64 sys_mount(void) {
+    // No mount support (no mount namespace/tmpfs): fail fast with ENOTSUP so
+    // tests that set up a mount (LTP creat06) TBROK cleanly instead of
+    // proceeding on a no-op "successful" mount and hanging in cleanup.
+    return -ENOTSUP;
+}
 
-uint64 sys_umount2(void) { return 0; }
+uint64 sys_umount2(void) { return -ENOTSUP; }
 
 uint64 sys_readlinkat(void) {
     char path[MAXPATH];

@@ -104,6 +104,7 @@
 
 #define SYS_copy_file_range 285
 #define SYS_ftruncate 46
+#define SYS_fallocate 47
 
 #define SYS_splice 76
 

@@ -2058,6 +2058,29 @@ uint64 sys_ftruncate(void) {
     return vfs_ext_ftruncate(f, length);
 }
 
+uint64 sys_fallocate(void) {
+    int fd, mode;
+    uint64 offset, length;
+    struct file *f;
+
+    argint(0, &fd);
+    argint(1, &mode);
+    argaddr(2, &offset);
+    argaddr(3, &length);
+
+    if (argfd(0, &fd, &f) < 0) return -EBADF;
+    if (!get_fops()->writable(f)) return -EBADF;
+    if (f->f_type != FD_REG) return -EINVAL;
+
+    /* mode 0 (FALLOC_FL_KEEP_SIZE clear): preallocate by extending the file
+     * to offset+length (same as ftruncate).  Used by the LTP framework's
+     * block-device fallback (tst_device) to size a file-backed device. */
+    if (mode == 0)
+        return vfs_ext_ftruncate(f, offset + length);
+
+    return -ENOTSUP; /* punch-hole / collapse-range not supported */
+}
+
 #ifdef RISCV
 void backtrace(void) {
     uint64 fp = r_fp();

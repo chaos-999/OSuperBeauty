@@ -183,6 +183,7 @@ extern uint64 sys_futex(void);
 extern uint64 sys_getpgid(void);
 extern uint64 sys_copy_file_range(void);
 extern uint64 sys_ftruncate(void);
+extern uint64 sys_fallocate(void);
 extern uint64 sys_splice(void);
 extern uint64 sys_symlinkat(void);
 extern uint64 sys_fsync(void);
@@ -286,6 +287,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_getpgid] sys_getpgid,
     [SYS_copy_file_range] sys_copy_file_range,
     [SYS_ftruncate] sys_ftruncate,
+    [SYS_fallocate] sys_fallocate,
     [SYS_splice] sys_splice,
     [SYS_fchmodat] sys_fchmodat,
     [SYS_fchown] sys_fchown,
