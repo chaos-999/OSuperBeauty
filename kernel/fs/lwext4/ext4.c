@@ -1729,6 +1729,7 @@ int ext4_fwrite(ext4_file *file, const void *buf, size_t size, size_t *wcnt) {
     struct ext4_inode_ref ref;
     const uint8_t *u8_buf = buf;
     int r, rr = EOK;
+    int wb_started = 0;  /* 1 after ext4_block_cache_write_back(1) */
 
     ext4_assert(file && file->mp);
 
@@ -1796,6 +1797,7 @@ int ext4_fwrite(ext4_file *file, const void *buf, size_t size, size_t *wcnt) {
     r = ext4_block_cache_write_back(file->mp->fs.bdev, 1);
     if (r != EOK)
         goto Finish;
+    wb_started = 1;
 
     fblock_start = 0;
     fblock_count = 0;
@@ -1853,6 +1855,7 @@ int ext4_fwrite(ext4_file *file, const void *buf, size_t size, size_t *wcnt) {
 
     /*Stop write back cache mode*/
     ext4_block_cache_write_back(file->mp->fs.bdev, 0);
+    wb_started = 0;
 
     if (r != EOK)
         goto Finish;
@@ -1889,6 +1892,15 @@ out_fsize:
     }
 
 Finish:
+    /* Balance the deferred-write-back counter on the error paths that
+     * bypass the ext4_block_cache_write_back(0) above.  A leaked counter
+     * would defer all later metadata flushes (htree leaf writes) and cause
+     * fresh directory entries to be read back unflushed. */
+    if (wb_started) {
+        ext4_block_cache_write_back(file->mp->fs.bdev, 0);
+        wb_started = 0;
+    }
+
     r = ext4_fs_put_inode_ref(&ref);
 
     if (r != EOK)
