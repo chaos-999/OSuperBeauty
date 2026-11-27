@@ -74,7 +74,14 @@ struct timezone {
     int tz_minuteswest; /* minutes west of Greenwich */
     int tz_dsttime;     /* type of DST correction */
 };
+
+struct itimerval {
+    struct timeval it_interval; /* next value (unused, single-shot alarm) */
+    struct timeval it_value;    /* current value */
+};
 #endif
+
+#define ITIMER_REAL 0 /* setitimer: real-time timer */
 
 extern uint ticks;
 

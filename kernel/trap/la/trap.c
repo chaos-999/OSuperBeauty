@@ -485,6 +485,8 @@ void clockintr() {
     ticks++;
     wakeup(&ticks);
     release(&tickslock);
+
+    check_alarms();
 }
 
 volatile uint64 clock_counter = 0;

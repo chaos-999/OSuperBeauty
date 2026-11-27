@@ -285,6 +285,8 @@ void clockintr() {
     wakeup(&ticks);
     release(&tickslock);
 
+    check_alarms();
+
     // 使用SBI调用设置下一次时钟中断
     // 1000000是约0.1秒
     SBI_SET_TIMER(r_time() + 100000);

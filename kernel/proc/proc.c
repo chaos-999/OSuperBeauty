@@ -155,6 +155,8 @@ found:
     p->sgid = 0;
     p->killed = 0;  // ensure known initial state
     p->exit_signal = 0;
+    p->alarm_deadline = 0;
+    p->alarm_active = 0;
     p->exec_path[0] = '\0';
     p->console_buf_pos = 0;
     memset(p->console_buf, 0, sizeof(p->console_buf));
@@ -244,6 +246,8 @@ static void freeproc(struct proc *p) {
     p->killed = 0;
     p->xstate = 0;
     p->exit_signal = 0;
+    p->alarm_deadline = 0;
+    p->alarm_active = 0;
     p->leader = 0;
     p->tg_shared = 0;
     p->state = UNUSED;
@@ -1166,6 +1170,25 @@ void wakeup(void *chan) {
             }
             release(&p->lock);
         }
+    }
+}
+
+// Fire expired ITIMER_REAL alarms: called from the clock interrupt.
+// For each process whose alarm deadline has passed, mark SIGALRM pending
+// and wake it if it is blocked in a sleep so it can run its handler (or
+// the default action) on return to user space.
+void check_alarms(void) {
+    struct proc *p;
+
+    for (p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        if (p->state != UNUSED && p->alarm_active && ticks >= p->alarm_deadline) {
+            p->alarm_active = 0;
+            p->sig_pending |= (1ULL << (SIGALRM - 1));
+            if (p->state == SLEEPING)
+                p->state = RUNNABLE;
+        }
+        release(&p->lock);
     }
 }
 

@@ -2231,14 +2231,38 @@ uint64 sys_rseq(void) { return 0; }
 
 uint64 sys_setitimer(void) {
     int which;
-    uint64 newv, oldv;
+    uint64 newv_addr, oldv_addr;
     argint(0, &which);
-    argaddr(1, &newv);
-    argaddr(2, &oldv);
-    if (oldv) {
-        char z[32];
-        memset(z, 0, sizeof(z));
-        if (copyout(myproc()->pagetable, oldv, z, sizeof(z)) < 0) return -EFAULT;
+    argaddr(1, &newv_addr);
+    argaddr(2, &oldv_addr);
+
+    struct proc *p = myproc();
+    struct itimerval newv, oldv;
+
+    if (newv_addr &&
+        copyin(p->pagetable, (char *)&newv, newv_addr, sizeof(newv)) < 0)
+        return -EFAULT;
+
+    if (which == ITIMER_REAL) {
+        if (newv_addr) {
+            /* value == {0,0} cancels the timer; otherwise arm a one-shot */
+            if (newv.it_value.tv_sec == 0 && newv.it_value.tv_usec == 0) {
+                p->alarm_active = 0;
+            } else {
+                uint64 dt = timespec_to_ticks(newv.it_value.tv_sec,
+                                              newv.it_value.tv_usec * 1000);
+                if (dt == 0)
+                    dt = 1;
+                p->alarm_deadline = ticks + dt;
+                p->alarm_active = 1;
+            }
+        }
+    }
+
+    if (oldv_addr) {
+        memset(&oldv, 0, sizeof(oldv));
+        if (copyout(p->pagetable, oldv_addr, (char *)&oldv, sizeof(oldv)) < 0)
+            return -EFAULT;
     }
     return 0;
 }
@@ -2248,9 +2272,10 @@ uint64 sys_getitimer(void) {
     uint64 cur;
     argint(0, &which);
     argaddr(1, &cur);
-    char z[32];
-    memset(z, 0, sizeof(z));
-    if (copyout(myproc()->pagetable, cur, z, sizeof(z)) < 0) return -EFAULT;
+    struct itimerval it;
+    memset(&it, 0, sizeof(it));
+    if (cur && copyout(myproc()->pagetable, cur, (char *)&it, sizeof(it)) < 0)
+        return -EFAULT;
     return 0;
 }
 
