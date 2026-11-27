@@ -201,6 +201,19 @@
   fork01/wait01/exit01/access01/uname01/times01/gettimeofday01/abort01/alarm07/atof01`），
   实测 **52 TPASS**（原来 8）。`chmod01` 在 RV 上内核自旋（LA 上 32 TPASS），暂排除。
 
+### 5.14 RV 内核挂死根因：partial mprotect 覆盖整个 VMA（已修）
+
+- 现象：`chmod01`、`clone01` 在 RV 上 100% CPU 自旋，LTP 的 30s alarm 也杀不掉。
+- 根因：`pthread_create` 映射线程栈后，对栈顶 guard page 做 `mprotect(PROT_NONE)`（**部分范围**）。
+  `sys_mprotect` 却把**整个 VMA 的 `prot` 改成 0**，把线程栈也变成 PROT_NONE；RV 的
+  `vmatrylazytouch` 对「PTE 已存在」的页做权限升级时，`v->prot==0` 没加任何权限却
+  `return 1`，于是写栈→缺页→假装成功→再写→再缺页，**无限缺页循环**。
+- 修复（`666900c`）：
+  1. `sys_mprotect` 仅当 mprotect 覆盖**整个 VMA** 时才更新 `v->prot`；部分范围只改 PTE。
+  2. `vmatrylazytouch`：`v->prot` 无任何权限时返回 0（不再假装成功）。
+- 结果：`chmod01` 从自旋 → **32 TPASS**；RV 19 用例合计 **84 TPASS**（之前 52），
+  全流程 557s。LA 侧同函数修复后行为更正确（LA 的 vmatrylazytouch 无该升级路径，本来就不循环）。
+
 ## 6. 结论与下一步建议
 
 - LTP 判分是「TPASS 数量」的对数映射，**多跑用例收益递减**（raw 100→18 分，500→80）。
