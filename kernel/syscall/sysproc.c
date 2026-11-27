@@ -2331,7 +2331,9 @@ uint64 sys_setitimer(void) {
 
     if (which == ITIMER_REAL) {
         if (newv_addr) {
-            /* value == {0,0} cancels the timer; otherwise arm a one-shot */
+            p->alarm_interval = timespec_to_ticks(newv.it_interval.tv_sec,
+                                                  newv.it_interval.tv_usec * 1000);
+            /* it_value == {0,0} cancels; otherwise arm (interval makes it periodic) */
             if (newv.it_value.tv_sec == 0 && newv.it_value.tv_usec == 0) {
                 p->alarm_active = 0;
             } else {
@@ -2347,6 +2349,25 @@ uint64 sys_setitimer(void) {
 
     if (oldv_addr) {
         memset(&oldv, 0, sizeof(oldv));
+        if (which == ITIMER_REAL) {
+            uint64 rem = 0;
+            if (p->alarm_active) {
+                rem = p->alarm_deadline > ticks ? p->alarm_deadline - ticks : 0;
+                if (rem == 0 && p->alarm_interval)
+                    rem = p->alarm_interval;
+            }
+            if (rem) {
+                uint64 ns = rem * TIMER_TICK_CYCLES * 1000000000ULL / TIMEBASE_FREQ;
+                oldv.it_value.tv_sec = ns / 1000000000ULL;
+                oldv.it_value.tv_usec = (ns % 1000000000ULL) / 1000;
+            }
+            uint64 iv = p->alarm_interval;
+            if (iv) {
+                uint64 ns = iv * TIMER_TICK_CYCLES * 1000000000ULL / TIMEBASE_FREQ;
+                oldv.it_interval.tv_sec = ns / 1000000000ULL;
+                oldv.it_interval.tv_usec = (ns % 1000000000ULL) / 1000;
+            }
+        }
         if (copyout(p->pagetable, oldv_addr, (char *)&oldv, sizeof(oldv)) < 0)
             return -EFAULT;
     }

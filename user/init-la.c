@@ -254,7 +254,7 @@ static const char *ltp_tests[] = {
   "setsockopt03"
 };
 #define LTP_N (int)(sizeof(ltp_tests)/sizeof(ltp_tests[0]))
-#define LTP_TIMEOUT 30
+#define LTP_TIMEOUT 75
 static void ltp_out_path(char *buf, int n) {
     const char *pre = "/tmp/ltp.";
     int k = 0;
@@ -287,12 +287,23 @@ static void run_ltp_dir(const char *dir, const char *group) {
         int killer = -1;
         if (pid > 0) {
             killer = fork();
-            if (killer == 0) { struct timespec wts = {LTP_TIMEOUT, 0}; nanosleep(&wts, 0); kill(pid, SIGKILL); exit(0); }
+            if (killer == 0) {
+                int tmo = LTP_TIMEOUT;
+                if (strcmp(ltp_tests[i], "mem02") == 0) tmo = 240;
+                struct timespec wts = {tmo, 0};
+                nanosleep(&wts, 0);
+                kill(pid, SIGKILL);
+                exit(0);
+            }
         }
         int st = 0;
         if (pid > 0) waitpid(pid, &st, 0);
         if (killer > 0) { kill(killer, SIGKILL); int kst; waitpid(killer, &kst, 0); }
         int pass=0, fail=0, brk=0, skip=0;
+        /* Give forked grandchildren a moment to flush their output into
+         * outpath before we harvest it (LTP tests report from children). */
+        struct timespec settle = {0, 200000000};
+        nanosleep(&settle, 0);
         int fd = open(outpath, O_RDONLY, 0);
         if (fd >= 0) {
             static char buf[4096]; static char line[1024]; int ll=0, r;

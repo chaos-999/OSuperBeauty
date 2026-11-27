@@ -156,6 +156,7 @@ found:
     p->killed = 0;  // ensure known initial state
     p->exit_signal = 0;
     p->alarm_deadline = 0;
+    p->alarm_interval = 0;
     p->alarm_active = 0;
     p->exec_path[0] = '\0';
     p->console_buf_pos = 0;
@@ -247,6 +248,7 @@ static void freeproc(struct proc *p) {
     p->xstate = 0;
     p->exit_signal = 0;
     p->alarm_deadline = 0;
+    p->alarm_interval = 0;
     p->alarm_active = 0;
     p->leader = 0;
     p->tg_shared = 0;
@@ -1201,8 +1203,13 @@ void check_alarms(void) {
     for (p = proc; p < &proc[NPROC]; p++) {
         acquire(&p->lock);
         if (p->state != UNUSED && p->alarm_active && ticks >= p->alarm_deadline) {
-            p->alarm_active = 0;
             p->sig_pending |= (1ULL << (SIGALRM - 1));
+            if (p->alarm_interval) {
+                /* periodic timer: re-arm for the next interval */
+                p->alarm_deadline = ticks + p->alarm_interval;
+            } else {
+                p->alarm_active = 0;
+            }
             if (p->state == SLEEPING)
                 p->state = RUNNABLE;
         }

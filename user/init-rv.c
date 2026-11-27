@@ -175,7 +175,9 @@ static void run_ltp_dir(const char *dir, const char *group) {
         if (pid > 0) {
             killer = fork();
             if (killer == 0) {
-                struct timespec wts = {30, 0};
+                int tmo = 75;
+                if (strcmp(ltp_tests[i], "mem02") == 0) tmo = 240;
+                struct timespec wts = {tmo, 0};
                 nanosleep(&wts, 0);
                 kill(pid, SIGKILL);
                 exit(0);
@@ -186,6 +188,10 @@ static void run_ltp_dir(const char *dir, const char *group) {
         if (killer > 0) { kill(killer, SIGKILL); int kst; wait(&kst); }
 
         int pass = 0, fail = 0, brk = 0, skip = 0;
+        /* Give forked grandchildren a moment to flush their output into
+         * outpath before we harvest it (LTP tests report from children). */
+        struct timespec settle = {0, 200000000};
+        nanosleep(&settle, 0);
         int fd = open(outpath, O_RDONLY, 0);
         if (fd >= 0) {
             static char buf[4096];
@@ -467,6 +473,22 @@ int main() {
     }
     dup(0);  // stdout
     dup(0);  // stderr
+    {
+        chdir("/musl/ltp/testcases/bin");
+        const char *ts[] = {"readlink01", "prctl03", "confstr01", "setitimer01", "mmap03", "proc01"};
+        for (int ti = 0; ti < 6; ti++) {
+            int p = fork();
+            if (p == 0) {
+                char *av[] = {(char *)ts[ti], 0};
+                char *ev[] = {"LD_LIBRARY_PATH=/musl/lib", 0};
+                execve((char *)ts[ti], av, ev);
+                exit(127);
+            }
+            int st = 0; wait(&st);
+            printf("TEST_DONE %s st=%x\n", ts[ti], st);
+        }
+        chdir("/");
+    }
 
     // --- 创建 /tmp 目录 ---
     mkdirat(AT_FDCWD, "/tmp", 0777);

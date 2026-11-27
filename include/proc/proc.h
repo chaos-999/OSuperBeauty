@@ -179,6 +179,7 @@ struct proc {
     int xstate;            // Exit status to be returned to parent's wait
     int exit_signal;       // If non-zero, killed by this signal (wait4 reports WIFSIGNALED)
     uint64 alarm_deadline; // Absolute tick when ITIMER_REAL should fire SIGALRM
+    uint64 alarm_interval; // ITIMER_REAL repeat interval in ticks (0 = one-shot)
     int alarm_active;      // 1 if an ITIMER_REAL alarm is pending
     int pid;               // Process ID 
     int tgid;              // Thread group ID
