@@ -204,8 +204,22 @@ void ext4_bcache_invalidate_lba(struct ext4_bcache *bc,
 				uint32_t cnt)
 {
 	uint64_t end = from + cnt - 1;
-	struct ext4_buf *tmp = ext4_buf_lookup(bc, from), *buf;
-	RB_FOREACH_FROM(buf, ext4_buf_lba, tmp) {
+	struct ext4_buf *buf;
+
+	/*
+	 * Walk the whole tree instead of starting at ext4_buf_lookup(from).
+	 * RB_FOREACH_FROM(x, name, y) sets x = y, so when `from` is not
+	 * currently cached (lookup returns NULL) the loop body never runs and
+	 * none of the *other* buffers in [from, end] get invalidated either.
+	 * That left stale (UPTODATE) copies of freed indirect/bitmap blocks in
+	 * the cache; once such a block was reallocated its old contents were
+	 * served back -> wrong file data.  Iterating everything and skipping
+	 * lba < from invalidates the whole range regardless of whether `from`
+	 * itself happens to be resident.
+	 */
+	RB_FOREACH(buf, ext4_buf_lba, &bc->lba_root) {
+		if (buf->lba < from)
+			continue;
 		if (buf->lba > end)
 			break;
 
