@@ -1398,6 +1398,9 @@ int ext4_fremove(const char *path) {
         ext4_block_cache_write_back(mp->fs.bdev, 1);
         r = ext4_trunc_inode(mp, child.index, 0);
         if (r != EOK) {
+            /* Balance the deferred-write-back counter: leaving it > 0
+             * would defer every later metadata flush. */
+            ext4_block_cache_write_back(mp->fs.bdev, 0);
             ext4_fs_put_inode_ref(&parent);
             ext4_fs_put_inode_ref(&child);
             ext4_trans_abort(mp);
