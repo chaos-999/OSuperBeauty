@@ -206,6 +206,9 @@ struct proc {
     struct vma vmas[NVMA];        // Virtual Memory Areas for mmap
     uint64 clear_child_tid;       // Clear child tid
     uint64 robust_list_head;      // Robust futex list head
+    uint64 fault_va;              // Last user page-fault va
+    uint64 fault_sepc;            // ... and its pc
+    int fault_cnt;                // consecutive identical faults
     int pt_shared;                // Page table shared via CLONE_VM
     int tg_shared;                // Thread group shares one page table
     struct proc *leader;          // Thread group leader (owns shared sz)

@@ -168,14 +168,32 @@ void usertrap(void) {
     } else if (r_scause() == 13 || r_scause() == 15) {
         // Page fault: Load page fault (13) or Store/AMO page fault (15)
         uint64 va = r_stval();
-        if (!vmatrylazytouch(va)) {
-            printf("vma lazy touch failed\n");
-            goto unexpected_scause;
+        /*
+         * Watchdog against unresolvable demand-paging loops: if the exact
+         * same fault (pc + va) repeats, vmatrylazytouch() is returning
+         * "handled" without actually making the page accessible (e.g. a
+         * read of an execute-only mapping, or a stale PROT_NONE VMA).
+         * Deliver SIGSEGV instead of spinning forever; the LTP tests
+         * install handlers and expect EFAULT/SIGSEGV.
+         */
+        if (va == p->fault_va && r_sepc() == p->fault_sepc) {
+            p->fault_cnt++;
+        } else {
+            p->fault_va = va;
+            p->fault_sepc = r_sepc();
+            p->fault_cnt = 1;
+        }
+        if (p->fault_cnt > 8) {
+            p->fault_cnt = 0;
+            printf("PF loop pid=%d va=%lx pc=%lx -> SIGSEGV\n",
+                   p->pid, va, r_sepc());
+            p->sig_pending |= (1ULL << (SIGSEGV - 1));
+        } else if (!vmatrylazytouch(va)) {
+            p->sig_pending |= (1ULL << (SIGSEGV - 1));
         }
     } else if ((which_dev = devintr()) != 0) {
         // ok
     } else {
-    unexpected_scause:
         printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
         printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
         setkilled(p);
