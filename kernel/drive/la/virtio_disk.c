@@ -307,6 +307,12 @@ void virtio_disk_rw(struct buf *b, int write) {
 
     while (!virtio_pci_clear_isr(&gs_virtio_blk_hw));
 
+    /* The device writes the used ring and the data buffer via DMA.  Without a
+     * barrier here the CPU may read a stale used entry / stale data buffer
+     * that is not yet coherent, which shows up as the ext4 htree leaf read
+     * returning pre-write contents (LTP chmod01 "testfile" missing). */
+    dsb();
+
     int id = disk.used->elems[disk.used_idx].id;
 
     if (disk.info[id].status != 0) panic("virtio_disk_intr status");
