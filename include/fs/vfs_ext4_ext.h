@@ -33,7 +33,7 @@ int vfs_ext_writeat(struct file *f, int is_user_addr, const uint64 addr, int n, 
 int vfs_ext_fflush(struct file *f);
 int vfs_ext_link(const char *oldpath, const char *newpath);
 int vfs_ext_rm(const char *path);
-int vfs_ext_stat(const char *path, struct kstat *st);
+int vfs_ext_stat(const char *path, struct kstat *st, int nofollow);
 int vfs_ext_fstat(struct file *f, struct kstat *st);
 int vfs_ext_mkdir(const char *path, uint64_t mode);
 int vfs_ext_is_dir(const char *path);

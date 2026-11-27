@@ -1427,13 +1427,13 @@ uint64 sys_fstatat(void) {
                 // pathname, absolute_path);
             }
         }
-        int r = vfs_ext_stat(absolute_path, &kbuf);
+        int r = vfs_ext_stat(absolute_path, &kbuf, (flags & AT_SYMLINK_NOFOLLOW) ? 1 : 0);
         if (r < 0) {
             // Retry only if there's a trailing '/'
             size_t alen = strlen(absolute_path);
             if (alen > 1 && absolute_path[alen - 1] == '/') {
                 absolute_path[alen - 1] = '\0';
-                r = vfs_ext_stat(absolute_path, &kbuf);
+                r = vfs_ext_stat(absolute_path, &kbuf, (flags & AT_SYMLINK_NOFOLLOW) ? 1 : 0);
             }
             if (r < 0) {
                 return r;

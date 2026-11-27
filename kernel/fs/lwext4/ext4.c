@@ -2413,16 +2413,20 @@ int ext4_readlink(const char *path, char *buf, size_t bufsize, size_t *rcnt) {
     EXT4_MP_LOCK(mp);
     ext4_block_cache_write_back(mp->fs.bdev, 1);
     r = ext4_generic_open2(&f, path, O_RDONLY, filetype, NULL, NULL);
-    if (r == EOK)
-        r = ext4_fread(&f, buf, bufsize, rcnt);
-    else
-        goto Finish;
+    if (r != EOK) {
+        ext4_block_cache_write_back(mp->fs.bdev, 0);
+        EXT4_MP_UNLOCK(mp);
+        return r;
+    }
+    EXT4_MP_UNLOCK(mp);
 
+    /* ext4_fread() takes the mount lock itself; holding it here would
+     * re-acquire the same sleeplock and deadlock (this is what made LTP
+     * lstat01 hang reading a freshly-created symlink). */
+    r = ext4_fread(&f, buf, bufsize, rcnt);
     ext4_fclose(&f);
 
-Finish:
     ext4_block_cache_write_back(mp->fs.bdev, 0);
-    EXT4_MP_UNLOCK(mp);
     return r;
 }
 

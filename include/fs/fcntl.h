@@ -10,6 +10,7 @@
 #define O_NONBLOCK 0x800
 
 #define AT_FDCWD -100
+#define AT_SYMLINK_NOFOLLOW 0x100
 #define AT_REMOVEDIR 0x200
 
 #define UTIME_NOW ((1l << 30) - 1l)

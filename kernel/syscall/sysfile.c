@@ -196,7 +196,7 @@ uint64 sys_statx(void) {
         }
 
         struct kstat kst;
-        int r = vfs_ext_stat(absolute_path, &kst);
+        int r = vfs_ext_stat(absolute_path, &kst, (flags & AT_SYMLINK_NOFOLLOW) ? 1 : 0);
         if (r < 0) {
             if (strcmp(myproc()->name, "git") == 0) {
                 // printf("DEBUG: sys_statx PATH stat fail abs='%s' rc=%d\n", absolute_path, r);
@@ -922,7 +922,7 @@ uint64 sys_faccessat(void) {
         }
     }
     struct kstat st;
-    int r = vfs_ext_stat(absolute_path, &st);
+    int r = vfs_ext_stat(absolute_path, &st, 0);
     if (r < 0) {
         if (strcmp(myproc()->name, "git") == 0) {
             int is_git_related =
