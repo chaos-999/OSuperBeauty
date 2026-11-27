@@ -146,6 +146,33 @@
 - Linux 对照：`struct file` 由 slab 分配后 `memset` 清零（`fget` 拿到的对象字段全为 0）；
   `fput` 走 `__fput` 释放，不存在「复用残留标志位」问题。
 
+### 5.9 fchmod(52)/chown uid-gid 未实现 — ✅ 已修复
+
+- 原状：`fchmod`（generic ABI 52）未注册 → fchmod01/02/04 TFAIL `ENOSYS`；
+  `sys_fchownat`/`sys_fchown` 是 `return 0` 空桩，chown03/chown05 TFAIL `wrong owner`。
+- 修复（`0488de1`）：
+  1. 新增 `SYS_fchmod=52` → `ext4_mode_set(f_path)`；自定义 `exec()` 从 55（generic ABI 的
+     fchown）迁到 1000，`SYS_fchown=55`。
+  2. `sys_fchmodat` 返回真实 `-errno`（原来一律 -1→EPERM）。
+  3. `ext4_owner_set`：`uid/gid==-1` 表示不改；并清 setuid/setgid（Linux chown 语义）。
+  4. `sys_fchown`/`sys_fchownat` 真正调用 `ext4_owner_set`。
+  5. `open(O_CREAT)` 新建文件时用调用者 euid/egid 初始化属主。
+- 验证：fchmod01=6 TPASS、fchmod04=TPASS、fchmodat01=6 TPASS、fchown01=TPASS、
+  chown05=6 TPASS、chown03=TPASS（basic-musl 仍 26/32）。
+
+### 5.10 `ext4_file/ext4_dir` 表锁未释放 → open14 panic — ✅ 已修复
+
+- 现象：cache=1024 全流程跑到 LTP `open14` 时
+  `acquire: lock 'ext4_file_table' already held by CPU 0` → panic。
+- 根因（`ae9ea2d`）：`free_ext4_file()`/`free_ext4_dir()` 只在指针命中表项的分支里
+  `release`，指针不在表内时直接返回 → 自旋锁泄漏，下一次 `alloc_ext4_file()` 重复加锁 panic。
+- 修复：把 `release` 移出循环，保证任何分支都释放。
+
+### 5.11 cache=1024 全流程结果（snapshot=on）
+
+- 191/191 用例全部执行，**LTP TPASS=301**（此前 157；目标 ~168），`gee=0, panic=0`，干净退出。
+- 按判分公式 `500*log10(1+9*raw/10000)`：LA raw 301 → **52.1 分**；LA+RV（×2）→ **94.0 分**。
+
 ## 6. 结论与下一步建议
 
 - LTP 判分是「TPASS 数量」的对数映射，**多跑用例收益递减**（raw 100→18 分，500→80）。
