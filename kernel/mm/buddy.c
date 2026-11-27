@@ -17,7 +17,7 @@ struct buddy {
 };
 
 // Support up to 512MB (131072 pages, level=17)
-#define MAX_BUDDY_LEVEL 17
+#define MAX_BUDDY_LEVEL 18
 static char
     buddy_memory[sizeof(struct buddy) + sizeof(uint8_t) * (((1 << MAX_BUDDY_LEVEL) * 2) - 2)];
 static struct buddy *global_buddy = 0;
