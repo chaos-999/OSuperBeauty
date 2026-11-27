@@ -75,6 +75,7 @@ void fileclose(struct file *f) {
     ff = *f;
     f->f_count = 0;
     f->f_type = FD_NONE;
+    f->removed = 0;
     release(&ftable.lock);
 
     if (ff.f_type == FD_PIPE) {
