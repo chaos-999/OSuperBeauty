@@ -173,6 +173,20 @@
 - 191/191 用例全部执行，**LTP TPASS=301**（此前 157；目标 ~168），`gee=0, panic=0`，干净退出。
 - 按判分公式 `500*log10(1+9*raw/10000)`：LA raw 301 → **52.1 分**；LA+RV（×2）→ **94.0 分**。
 
+### 5.12 harness 实测踩到的两个 ABI/构建坑
+
+1. **fchmodat 是 3 参数 syscall（53），不是 4 参数**。musl 的 `chmod()` 只传
+   `(AT_FDCWD, path, mode)`，第 4 个寄存器 a3 是垃圾值。曾经给 `sys_fchmodat` 加
+   `flags & ~AT_SYMLINK_NOFOLLOW → EINVAL` 的检查，结果 harness 里所有 LTP 用例
+   setup 的 `chmod("/dev/shm/ltp_*", 0666)` 全 EINVAL（LTP TPASS 掉到 23，总分 929）。
+   已回退：fchmodat 只读 3 个参数（`flags` 可读但不可据此报错）；fchmodat02 的
+   EFAULT/ENAMETOOLONG/ENOTDIR 边角暂不追求。
+2. **`SYS_exec` 从 55 改到 1000 后必须重建 `usys-*.o`**。`initcode-*` 规则虽然会
+   `perl usys-*.pl > usys-*.S` 再编译，但 `syscall.h` 不在依赖里，只改 syscall.h 时
+   `make` 不会重跑该规则，旧 `usys-rv.o` 仍是 `li a7,55` → RV 的 `exec()` 打到
+   `sys_fchown`，RV basic 组全空（分数少 ~200）。已在 Makefile 给两个 initcode 目标
+   加上 `include/syscall/syscall.h` 依赖。
+
 ## 6. 结论与下一步建议
 
 - LTP 判分是「TPASS 数量」的对数映射，**多跑用例收益递减**（raw 100→18 分，500→80）。
