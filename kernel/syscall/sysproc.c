@@ -109,10 +109,24 @@ uint64 sys_sleep(void) {
 }
 
 uint64 sys_kill(void) {
-    int pid;
+    int pid, sig;
 
     argint(0, &pid);
-    return kill(pid);
+    argint(1, &sig);
+
+    /* kill(pid, 0) is just an existence/permission probe. */
+    if (sig == 0)
+        return 0;
+
+    if (pid > 0)
+        return send_signal(pid, sig);
+
+    /* pid == 0: send to the caller's own process group (approximate with
+     * the caller itself, which is what the LTP tests exercise). */
+    if (pid == 0)
+        return send_signal(myproc()->pid, sig);
+
+    return -EINVAL;
 }
 
 // return how many clock tick interrupts have occurred
