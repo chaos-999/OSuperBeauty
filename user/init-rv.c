@@ -168,8 +168,22 @@ static void run_ltp_dir(const char *dir, const char *group) {
             execve((char *)ltp_tests[i], av, ev);
             exit(127);
         }
+        /* Per-case watchdog: a test waiting forever for a signal (RV
+         * setitimer01) must not stall the whole run.  Same 30s SIGKILL
+         * killer as init-la.c. */
+        int killer = -1;
+        if (pid > 0) {
+            killer = fork();
+            if (killer == 0) {
+                struct timespec wts = {30, 0};
+                nanosleep(&wts, 0);
+                kill(pid, SIGKILL);
+                exit(0);
+            }
+        }
         int st = 0;
         if (pid > 0) wait(&st);
+        if (killer > 0) { kill(killer, SIGKILL); int kst; wait(&kst); }
 
         int pass = 0, fail = 0, brk = 0, skip = 0;
         int fd = open(outpath, O_RDONLY, 0);

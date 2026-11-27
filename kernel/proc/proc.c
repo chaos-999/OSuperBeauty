@@ -922,6 +922,15 @@ int waitpid(int target_pid, uint64 wstatus_addr, int options) {
             return -ECHILD;
         }
 
+        /* WNOHANG: report "no child ready" instead of blocking.  This path
+         * ignored options before, so the LTP runner's
+         * waitpid(-1, &st, WNOHANG) orphan reaper blocked forever after the
+         * first test that left a live child behind. */
+        if (options & WNOHANG) {
+            release(&wait_lock);
+            return 0;
+        }
+
         // If waiting for a specific PID, verify it exists as our child
         if (target_pid > 0) {
             int child_exists = 0;
