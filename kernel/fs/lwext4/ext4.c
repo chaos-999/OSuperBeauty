@@ -2073,8 +2073,18 @@ int ext4_owner_set(const char *path, uint32_t uid, uint32_t gid) {
     if (r != EOK)
         goto Finish;
 
-    ext4_inode_set_uid(inode_ref.inode, uid);
-    ext4_inode_set_gid(inode_ref.inode, gid);
+    /* -1 (0xFFFFFFFF) means "do not change" (POSIX chown semantics) */
+    if (uid != (uint32_t)-1)
+        ext4_inode_set_uid(inode_ref.inode, uid);
+    if (gid != (uint32_t)-1)
+        ext4_inode_set_gid(inode_ref.inode, gid);
+
+    /* Linux chown() always clears the set-user-ID and set-group-ID bits. */
+    {
+        uint32_t mode = ext4_inode_get_mode(&mp->fs.sb, inode_ref.inode);
+        mode &= ~(0x800u | 0x400u); /* S_ISUID | S_ISGID */
+        ext4_inode_set_mode(&mp->fs.sb, inode_ref.inode, mode);
+    }
 
     inode_ref.dirty = true;
     r = ext4_trans_put_inode_ref(mp, &inode_ref);

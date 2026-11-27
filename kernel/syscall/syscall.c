@@ -75,6 +75,7 @@ extern uint64 sys_kill(void);
 extern uint64 sys_execve(void);
 extern uint64 sys_fstat(void);
 extern uint64 sys_chdir(void);
+extern uint64 sys_fchmod(void);
 extern uint64 sys_fchmodat(void);
 extern uint64 sys_fchown(void);
 extern uint64 sys_fchownat(void);
@@ -289,6 +290,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_ftruncate] sys_ftruncate,
     [SYS_fallocate] sys_fallocate,
     [SYS_splice] sys_splice,
+    [SYS_fchmod] sys_fchmod,
     [SYS_fchmodat] sys_fchmodat,
     [SYS_fchown] sys_fchown,
     [SYS_fchownat] sys_fchownat,

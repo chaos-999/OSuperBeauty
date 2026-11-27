@@ -18,8 +18,8 @@
 #define SYS_umount2 39
 #define SYS_mount 40
 #define SYS_chdir 49
+#define SYS_fchmod 52
 #define SYS_fchmodat 53
-#define SYS_exec 55
 #define SYS_openat 56
 #define SYS_close 57
 #define SYS_pipe2 59
@@ -64,6 +64,7 @@
 #define SYS_clone 220
 #define SYS_clone3 435
 #define SYS_execve 221
+#define SYS_exec 1000  /* custom exec() helper (55 is fchown on the generic ABI) */
 #define SYS_mmap 222
 #define SYS_mprotect 226
 #define SYS_madvise 233
@@ -112,7 +113,7 @@
 #define SYS_fsync 82
 #define SYS_fdatasync 83
 #define SYS_fchownat 54
-#define SYS_fchown 666
+#define SYS_fchown 55
 
 // Small compatibility syscalls (asm-generic numbers, used by LTP)
 #define SYS_preadv 69

@@ -22,6 +22,7 @@
 #include "fs/ext4/ext4.h"
 #include "ioctl.h"
 #include "pipe.h"
+#include "errno.h"
 
 // Minimal substring check for kernel (no libc)
 static inline int k_str_contains(const char *s, const char *pat) {
@@ -453,6 +454,15 @@ uint64 sys_openat(void) {
         f->f_count = 1;
         strcpy(f->f_path, absolute_path);
 
+        /* Detect creation so the new inode can inherit the caller's
+         * euid/egid (Linux uses current_fsuid/fsgid at inode allocation). */
+        int was_created = 0;
+        if (flags & (O_CREAT | O_CREATE)) {
+            struct kstat tmp_st;
+            if (vfs_ext_stat(absolute_path, &tmp_st, 1) != 0)
+                was_created = 1;
+        }
+
         int rc = vfs_ext_openat(f);
         if (rc < 0) {
             get_fops()->close(f);
@@ -464,6 +474,9 @@ uint64 sys_openat(void) {
                 return 4;
             }
             return rc;  // Return negative error code directly
+        }
+        if (was_created) {
+            ext4_owner_set(absolute_path, myproc()->euid, myproc()->egid);
         }
         return fd;
     }
@@ -1281,6 +1294,32 @@ uint64 sys_fdatasync(void) {
     return 0;
 }
 
+static uint64 chmod_path(const char *absolute_path, int mode) {
+    struct filesystem *fs = get_fs_from_path(absolute_path);
+    if (fs == NULL)
+        return -ENOENT;
+    if (fs->type == EXT4) {
+        int r = ext4_mode_set(absolute_path, mode);
+        if (r != 0)
+            return (uint64)(-(int64)r);
+    }
+    return 0;
+}
+
+uint64 sys_fchmod(void) {
+    int fd, mode;
+    struct file *f;
+
+    argint(1, &mode);
+    if (argfd(0, &fd, &f) < 0)
+        return -EBADF;
+
+    if (f->f_type != FD_REG && f->f_type != FD_DEVICE)
+        return 0;
+
+    return chmod_path(f->f_path, mode);
+}
+
 uint64 sys_fchmodat(void) {
     int dirfd, flags;
     char path[MAXPATH];
@@ -1291,12 +1330,12 @@ uint64 sys_fchmodat(void) {
     argint(3, &flags);
 
     if (argstr(1, path, MAXPATH) < 0) {
-        return -1;
+        return -EINVAL;
     }
 
     // Check dirfd validity
     if (dirfd != AT_FDCWD && (dirfd < 0 || dirfd >= NOFILE || myproc()->ofile[dirfd] == 0)) {
-        return -1;
+        return -EBADF;
     }
 
     // Get the directory path
@@ -1304,53 +1343,53 @@ uint64 sys_fchmodat(void) {
     char absolute_path[MAXPATH] = {0};
     get_absolute_path(path, dirpath, absolute_path);
 
-    // printf("fchmodat: path=%s, absolute_path=%s, mode=%d\n", path, absolute_path, mode);
+    return chmod_path(absolute_path, mode);
+}
 
-    // Get filesystem for the path
+static uint64 chown_path(const char *absolute_path, int owner, int group) {
     struct filesystem *fs = get_fs_from_path(absolute_path);
-    if (fs == NULL) {
-        printf("fchmodat: get_fs_from_path failed for %s\n", absolute_path);
-        return -1;
-    }
-
-    // Only support EXT4 filesystem
+    if (fs == NULL)
+        return -ENOENT;
     if (fs->type == EXT4) {
-        // Use ext4_mode_set to change file permissions
-        int r = ext4_mode_set(absolute_path, mode);
-        // printf("fchmodat: ext4_mode_set returned %d\n", r);
-        if (r != 0) {
-            return -1;
-        }
-    } else {
-        // For other filesystems, return success without actually changing mode
-        // This is a simple implementation that passes basic tests
-        printf("fchmodat: non-EXT4 filesystem, returning success\n");
-        return 0;
+        int r = ext4_owner_set(absolute_path, (uint32_t)owner, (uint32_t)group);
+        if (r != 0)
+            return (uint64)(-(int64)r);
     }
-
     return 0;
 }
 
-// Minimal stubs for ownership changing to satisfy libc/tools expectations.
-// For our single-user environment, just succeed without changing anything.
 uint64 sys_fchown(void) {
     int fd, owner, group;
-    argint(0, &fd);
+    struct file *f;
+
     argint(1, &owner);
     argint(2, &group);
-    // Validate fd if desired, but we can just return success.
-    return 0;
+    if (argfd(0, &fd, &f) < 0)
+        return -EBADF;
+
+    if (f->f_type != FD_REG && f->f_type != FD_DEVICE)
+        return 0;
+
+    return chown_path(f->f_path, owner, group);
 }
 
 uint64 sys_fchownat(void) {
     int dirfd, owner, group, flags;
     char path[MAXPATH];
     argint(0, &dirfd);
-    if (argstr(1, path, MAXPATH) < 0) return -1;
+    if (argstr(1, path, MAXPATH) < 0) return -EINVAL;
     argint(2, &owner);
     argint(3, &group);
     argint(4, &flags);
-    return 0;
+
+    if (dirfd != AT_FDCWD && (dirfd < 0 || dirfd >= NOFILE || myproc()->ofile[dirfd] == 0))
+        return -EBADF;
+
+    const char *dirpath = (dirfd == AT_FDCWD) ? myproc()->cwd.path : myproc()->ofile[dirfd]->f_path;
+    char absolute_path[MAXPATH] = {0};
+    get_absolute_path(path, dirpath, absolute_path);
+
+    return chown_path(absolute_path, owner, group);
 }
 
 uint64 sys_preadv(void) {
