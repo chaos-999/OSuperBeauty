@@ -131,6 +131,21 @@
 - Linux 对照：`setitimer(ITIMER_REAL)` 由 `struct hrtimer` + `posix_timer` 承载，到期在
   软中断里 `send_sig(SIGALRM)`；单次 `it_interval=0` 即一次性定时器。
 
+### 5.8 file 对象复用时 `removed` 位泄漏 → chmod/chown/access 的 `Failed to chmod file: EPERM` — ✅ 已修复
+
+- 现象：chmod01/chmod03/chown03/access01 在 setup 的 `SAFE_TOUCH`（open + chmod + close）里
+  `chmod("testfile")` 返回 ENOENT，TBROK `Failed to chmod file 'testfile': EPERM`。
+  之前被误判为块缓存陈旧读，实为 **file 生命周期 bug**。
+- 根因（`d879614` 已修）：`fileclose()` 把文件拷到局部 `ff`、用 `ff.removed` 做延迟 unlink
+  （`vfs_ext_rm`）后清的是 `ff.removed`，**从未清原 `f->removed`**；`filealloc()` 复用
+  `f_count==0` 的文件对象时不重置任何字段。于是下一个 open 的文件继承了上一条「open 中
+  被 unlink 的 scratch 文件（`ltp_<tid>_<pid>`）」留下的 `removed=1`，close 时被误判为
+  「已删除」而 `vfs_ext_rm` 掉刚建好的 `testfile`，随后 `chmod()` 找不到它 → ENOENT。
+- 修复：`fileclose` 里随 `f->f_count=0; f->f_type=FD_NONE;` 一并 `f->removed=0`。
+- 结果：**chmod01 现 32 TPASS**（文件+目录两变体各 8 组 chmod+stat，之前 0 + TBROK）。
+- Linux 对照：`struct file` 由 slab 分配后 `memset` 清零（`fget` 拿到的对象字段全为 0）；
+  `fput` 走 `__fput` 释放，不存在「复用残留标志位」问题。
+
 ## 6. 结论与下一步建议
 
 - LTP 判分是「TPASS 数量」的对数映射，**多跑用例收益递减**（raw 100→18 分，500→80）。
