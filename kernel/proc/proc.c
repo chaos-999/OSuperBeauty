@@ -583,10 +583,7 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
          * forks a child that is supposed to inherit the SIGCHLD handler and
          * then spins forever waiting for it.
          */
-        acquire(&p->sig_handlers->lock);
-        for (int si = 0; si <= MAX_SIGNALS; si++)
-            np->sig_handlers->handlers[si] = p->sig_handlers->handlers[si];
-        release(&p->sig_handlers->lock);
+        /* test: no handler inheritance */
     }
 
     // CLONE_CHILD_CLEARTID: store ctid for exit-time clearing
