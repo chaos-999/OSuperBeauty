@@ -1,12 +1,13 @@
-# LTP：187 例（LA）+ 6 例（RV）子集跑通，遗留问题与 Linux 对照
+# LTP：188 例（LA）+ 6 例（RV）子集跑通，遗留问题与 Linux 对照
 
 > 接 `55-ltp-dynamic-loader-blocker.md`。上一轮结论是“镜像 LTP 全是动态链接，loader 语义不足”。
-> 本轮把动态 loader 的关键缺口补齐后，LA 上跑通了一个 **187 例**的 syscall 子集
+> 本轮把动态 loader 的关键缺口补齐后，LA 上跑通了一个 **188 例**的 syscall 子集
 > （官方 harness 采到 raw 90，隔离验证 168），RV 保留 6 例（raw 7）。
 >
 > 结论：**判分格式、运行框架、动态 loader 都已打通**；剩余问题集中在
 > ① 块缓存无 readahead/过小导致加载慢（LTP 超时）、② 块缓存偶发陈旧读、③ 若干
-> 语义偏差（pipe EPIPE、symlink、mount、getdents 损坏项）。下文逐项对照 Linux 实现。
+> 语义偏差（symlink、mount、getdents 损坏项）。pipe EPIPE/SIGPIPE 已在本轮修复（§5.3）。
+> 下文逐项对照 Linux 实现。
 
 ---
 
@@ -42,7 +43,7 @@
 | `setresuid/getresuid/setresgid/getresgid/setfsuid/setfsgid/getgroups/setgroups` ENOSYS | musl `seteuid` 实为 `setresuid`，ENOSYS 让大量用例 TBROK | 按 generic 编号 147-152/158/159 实现 | Linux 用 `struct cred`（COW 引用计数）承载 uid/gid 全集合，`setresuid` 系列返回 0 并更新 cred |
 | RV PIE 程序 fork 后解释器页缺失 | ld.so 落在 `p->sz` 之上，`uvmcopy` 漏复制，子进程首条 ld.so 指令指令缺页 | 新增 `interp_start/interp_end` 随 fork/exec 复制/释放 | Linux 把 ld.so 当作普通共享库 mmap 进进程地址空间，`fork` 复制整个 `mm_struct` 自然覆盖它 |
 
-## 4. 用例筛选（200 → 187 LA / 60 RV）
+## 4. 用例筛选（200 → 188 LA / 60 RV）
 
 从镜像 `/musl/ltp/testcases/bin`（950 个二进制）按「syscall 名 + 两位编号」过滤，
 排除网络/IPC/命名空间/抢占等类别，再逐个剔除会 panic/死锁/刷屏的：
@@ -51,7 +52,7 @@
   `getcwd03`（chdir+readdir 清理）、`creat06`（mount+清理）、`lchown01/03`、`lstat01`、
   `readlink01/readlinkat01/02`（symlink 解析）、`openat01/201`（`strcpy` 空源）
 - `panic: sched locks`：`fchownat02`
-- 刷屏（pipe 满写返回 EPERM 导致用例重试）：`pipe04/15`
+- 刷屏（pipe 满写返回 EPERM 导致用例重试）：`pipe04/15`（**pipe04 已修复并加回**，见 §5.3）
 
 ## 5. 遗留问题 & 与 Linux 实现的对照
 
@@ -77,11 +78,20 @@
   生命周期由 radix tree 与 refcount 严格管理，绝无「同一 LBA 返回旧数据」；
   `end_buffer_async_read` 里 `SetPageUptodate` 只在真实读完磁盘后置位。
 
-### 5.3 pipe 写 EPIPE 语义（pipe04 刷屏）
+### 5.3 pipe 写 EPIPE 语义（pipe04 刷屏）— ✅ 已修复
 
-- 我们的 `pipewrite` 在 `readopen==0` 时 `return -1`（→ 用户态 EPERM）；LTP pipe04 期望
+- 原状：`pipewrite` 在 `readopen==0` 时 `return -1`（→ 用户态 EPERM），LTP pipe04 期望
   `EPIPE`（并触发 SIGPIPE），拿到 EPERM 后子进程重试刷屏。
-- Linux：读端关闭时 `pipe_write` 返回 `-EPIPE` 并向本线程发 `SIGPIPE`（`kill_fasync`）。
+- 修复（`b0fdfa4`）：
+  1. `pipewrite`/`pipewrite_kernel` 读端关闭时返回 `-EPIPE` 并置 `sig_pending |= SIGPIPE`；
+     `killed` 分支单独返回 `-EINTR`。
+  2. 新增 `proc.exit_signal`（`sig_default_action`/`SIGKILL` 置位），`wait4` 在子进程被信号
+     杀死时把 wait status 的低 7 位置成信号号（`WIFSIGNALED` 为真），而不是 `(xstate&0xff)<<8`
+     的 exit(255) 假象。
+- 结果：**pipe04 现 2 TPASS**（`Child 1/2 killed while writing to a pipe`），已加回 LA 列表
+  （188 例）。`pipe15` 仍 TBROK（依赖 `/proc/sys/fs/pipe-user-pages-soft`）。
+- Linux：读端关闭时 `pipe_write` 返回 `-EPIPE` 并向本线程发 `SIGPIPE`（`kill_fasync`）；进程被
+  信号杀死时 `exit_code` 直接是信号号，`wait` 原样返回。
 
 ### 5.4 symlink 解析（lchown/lstat/readlink 死锁）
 
