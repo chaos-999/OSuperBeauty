@@ -443,10 +443,10 @@ void free_ext4_dir(struct ext4_dir *dir) {
     for (i = 0; i < NFILE; i++) {
         if (dir == &ext4_dir_table.dir[i]) {
             ext4_dir_table.valid[i] = 0;
-            release(&ext4_dir_table.lock);
-            return;
+            break;
         }
     }
+    release(&ext4_dir_table.lock);
 }
 
 void free_ext4_file(struct ext4_file *file) {
@@ -455,8 +455,8 @@ void free_ext4_file(struct ext4_file *file) {
     for (i = 0; i < NFILE; i++) {
         if (file == &ext4_file_table.file[i]) {
             ext4_file_table.valid[i] = 0;
-            release(&ext4_file_table.lock);
-            return;
+            break;
         }
     }
+    release(&ext4_file_table.lock);
 }
