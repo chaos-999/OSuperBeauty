@@ -575,6 +575,18 @@ int clone(unsigned long flags, void *stack, uint64 ptid, unsigned long tls, uint
         p->sig_handlers->refcount++;
         release(&p->sig_handlers->lock);
         np->sig_handlers = p->sig_handlers;  // 共享指针，不复制
+    } else {
+        /*
+         * fork() (no CLONE_SIGHAND): the child must inherit a *copy* of the
+         * parent's signal handlers, as Linux does.  Without this a plain
+         * fork() child fell back to SIG_DFL for every signal; LTP kill12
+         * forks a child that is supposed to inherit the SIGCHLD handler and
+         * then spins forever waiting for it.
+         */
+        acquire(&p->sig_handlers->lock);
+        for (int si = 0; si <= MAX_SIGNALS; si++)
+            np->sig_handlers->handlers[si] = p->sig_handlers->handlers[si];
+        release(&p->sig_handlers->lock);
     }
 
     // CLONE_CHILD_CLEARTID: store ctid for exit-time clearing
