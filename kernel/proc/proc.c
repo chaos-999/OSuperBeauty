@@ -154,6 +154,7 @@ found:
     p->egid = 0;
     p->sgid = 0;
     p->killed = 0;  // ensure known initial state
+    p->exit_signal = 0;
     p->exec_path[0] = '\0';
     p->console_buf_pos = 0;
     memset(p->console_buf, 0, sizeof(p->console_buf));
@@ -242,6 +243,7 @@ static void freeproc(struct proc *p) {
     p->chan = 0;
     p->killed = 0;
     p->xstate = 0;
+    p->exit_signal = 0;
     p->leader = 0;
     p->tg_shared = 0;
     p->state = UNUSED;
@@ -964,7 +966,10 @@ int wait4(int pid, uint64 wstatus_addr, int options) {
                     found_pid = pp->pid;
                     // 不修改 pp->xstate，用局部变量打包退出状态
                     // Linux wait4 约定：内核返回原始 xstate，用户空间 WEXITSTATUS 提取
-                    int status_word = (pp->xstate & 0xff) << 8;
+                    // 被信号杀死（如 SIGPIPE）时，wait status 低 7 位是信号号，
+                    // WIFSIGNALED(status) 为真；否则正常退出 status = (code & 0xff) << 8。
+                    int status_word = pp->exit_signal ? pp->exit_signal
+                                                      : ((pp->xstate & 0xff) << 8);
                     if (wstatus_addr != 0 && copyout(p->pagetable, wstatus_addr,
                                                      (char *)&status_word, sizeof(status_word)) < 0) {
                         release(&pp->lock);

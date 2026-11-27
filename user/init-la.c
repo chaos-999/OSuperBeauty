@@ -200,6 +200,7 @@ static const char *ltp_tests[] = {
   "open14",
   "page02",
   "pause03",
+  "pipe04",
   "pipe07",
   "pipe09",
   "pipe11",

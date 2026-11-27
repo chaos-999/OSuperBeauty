@@ -139,6 +139,7 @@ void sig_default_action(struct proc *p, int signum) {
         case SIGUSR2:
             // 终止进程
             p->killed = 1;
+            p->exit_signal = signum;
             break;
 
         case SIGCHLD:
@@ -269,6 +270,7 @@ int send_signal(int pid, int sig) {
              */
             if (sig == SIGKILL) {
                 p->killed = 1;
+                p->exit_signal = SIGKILL;
                 if (p->state == SLEEPING)
                     p->state = RUNNABLE;
             }

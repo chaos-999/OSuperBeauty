@@ -6,6 +6,8 @@
 #include "proc/proc.h"
 #include "fs/fcntl.h"
 #include "fs/vfs/file.h"
+#include "errno.h"
+#include "signal.h"
 
 #define PIPESIZE 512
 
@@ -67,9 +69,16 @@ int pipewrite(struct pipe *pi, uint64 addr, int n) {
 
     acquire(&pi->lock);
     while (i < n) {
-        if (pi->readopen == 0 || killed(pr)) {
+        if (pi->readopen == 0) {
+            /* Linux: writing to a broken pipe returns EPIPE and raises
+             * SIGPIPE on the calling thread. */
+            pr->sig_pending |= (1ULL << (SIGPIPE - 1));
             release(&pi->lock);
-            return -1;
+            return -EPIPE;
+        }
+        if (killed(pr)) {
+            release(&pi->lock);
+            return -EINTR;
         }
         if (pi->nwrite == pi->nread + PIPESIZE) {
             wakeup(&pi->nread);
@@ -118,9 +127,13 @@ int pipewrite_kernel(struct pipe *pi, uint64 addr, int n) {
 
     for (bytes_written = 0; bytes_written < n;) {
         // Check if pipe is still readable or process was killed
-        if (pi->readopen == 0 || killed(current_proc)) {
+        if (pi->readopen == 0) {
             release(&pi->lock);
-            return -1;
+            return -EPIPE;
+        }
+        if (killed(current_proc)) {
+            release(&pi->lock);
+            return -EINTR;
         }
 
         // Wait if pipe buffer is full
