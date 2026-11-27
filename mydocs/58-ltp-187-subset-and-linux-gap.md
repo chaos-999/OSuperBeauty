@@ -73,7 +73,14 @@
   （`busybox_testcode.sh: line 28/30/32: Gee,: not found`，而脚本只有 27 行），
   使 busybox-glibc 从 53 掉到 22，并连带 libcbench-glibc/lua-glibc 全 0，总分 1158→1074。
 - 只在缓存 16→1024 或加了 `sync` 刷脏时出现；缓存=16、无 sync 连续两次 harness 稳定
-  1158/1162。疑似 lwext4 块缓存在大容量下的 LRU/up-to-date 维护 bug，根因未最终定位。
+  1158/1162。
+- 根因定位（两处）：
+  1. **`ext4_bcache_invalidate_lba` 漏失效**（`bf667fd` 已修）：原实现只 `lookup(from)` 再
+     `RB_FOREACH_FROM(tmp)`，当 `from` 不在缓存时循环体不执行，`[from,end]` 里其它已缓存
+     的块不会被失效 → 释放块的旧内容留在缓存里被重新读回。改为遍历整棵树跳过 `lba<from`。
+  2. 缓存放大到 1024 后还触发 **getdents01 内核级自旋**（100% CPU、看门狗杀不掉，目录迭代
+     读到陈旧目录块）；这是陈旧读的另一表现，invalidate_lba 修复未覆盖。故 `cache=1024`
+     仍不安全，保持 16。
 - Linux 对照：page cache 用 `struct page` + 每页 `PageUptodate/PageDirty` 标志，块的
   生命周期由 radix tree 与 refcount 严格管理，绝无「同一 LBA 返回旧数据」；
   `end_buffer_async_read` 里 `SetPageUptodate` 只在真实读完磁盘后置位。
@@ -110,6 +117,19 @@
 
 - Linux 用 `ext4_check_dir_entry` 一次性校验 `inode/rec_len/name_len/block 边界`，
   发现损坏返回 `-EFSCORRUPTED` 并 `ext4_error` 标记文件系统只读，绝不进入死循环。
+
+### 5.7 alarm/setitimer 是空实现（alarm07 1 TPASS+1 TFAIL）— ✅ 已修复
+
+- 原状：`sys_setitimer` 只清空 old 值并返回 0，`alarm(N)` 从不投递 SIGALRM，alarm07 拿到
+  `alarm_cnt(0) != 1` 的 TFAIL。
+- 修复（`e01cb7b`）：
+  1. `proc.alarm_deadline/alarm_active` + `sys_setitimer(ITIMER_REAL, {it_value})` 按
+     `timespec_to_ticks` 设一次定时；`{0,0}` 取消。
+  2. `check_alarms()` 挂在时钟中断（LA/RV 的 `clockintr`）里：到期进程置 `SIGALRM` pending、
+     唤醒 SLEEPING 进程，返回用户态时执行 handler/默认动作。
+- 结果：**alarm07 现 2 TPASS**（`alarm_cnt == 0` 之前、`alarm_cnt == 1` 之后）。
+- Linux 对照：`setitimer(ITIMER_REAL)` 由 `struct hrtimer` + `posix_timer` 承载，到期在
+  软中断里 `send_sig(SIGALRM)`；单次 `it_interval=0` 即一次性定时器。
 
 ## 6. 结论与下一步建议
 
