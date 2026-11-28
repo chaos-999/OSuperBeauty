@@ -378,3 +378,26 @@ socket/SysV IPC/loop 设备/mount 和少量信号语义，见 §5.1–5.14。
   init 仍为完整 191 例。按用户要求不再跑大规模回归；正式测评由用户执行。
   预计 LTP：LA 655 / RV 650（净差 5，全部为已证明的测试二进制/浮点/用户态
   musl 差异）。
+
+### 5.21 NVMA 6144：mprotect 拆分导致 pthread 栈 VMA 翻倍的回归（本次正式测评暴露）
+
+用户在 5227042 上跑正式测评时，RV 在 **libcbench-glibc** 的
+`b_pthread_createjoin_serial2` 之后、`b_pthread_create_serial1` 阶段
+`panic: mmap: no free vma`（现场另存 `rv_panic_vma_*.txt`）。
+
+- 根因：`b_pthread_create_serial1` 一次创建 **2500 个不 join 的线程**；
+  musl/glibc 的 pthread 栈都是先 `mmap(PROT_NONE)` 整段，再对 guard 以上的
+  可用区 mprotect。5.20 的 VMA 拆分把每个栈变成 **2 个 VMA**
+  （guard + usable），峰值 5000 个，超过 `NVMA=3072`，`sys_mmap` 直接 panic。
+  这是 5.20 引入的回归，不是 LTP 用例问题。
+- 修复：`NVMA 3072 -> 6144`（2500×2 + 1144 余量）。内核 BSS 从 ~39MB
+  增至 ~77MB；在 1GB 内存下仍保留 ~920MB 给 buddy。
+- 定向验证（都在 NVMA=6144 的干净构建上）：
+  - RV `libcbench-glibc` 和 `libcbench-musl` 均跑完
+    `b_pthread_create_serial1`、`b_pthread_uselesslock`，打印
+    `#### OS COMP TEST GROUP END`，0 panic；
+  - RV `mem02` 5/5、`gettid02` 11、`mmap03` 1、`mmapstress01` 1；
+  - LA `mem02` 5/5、`gettid02` 11、`mmap03` 1、`mmapstress01` 1，0 panic。
+- 之前那次正式测评因 RV panic 作废；提交目录里遗留的
+  `sdcard-rv.img`/`sdcard-la.img` 已删除，重跑前不会再触发
+  `gzip: ... already exists`。
