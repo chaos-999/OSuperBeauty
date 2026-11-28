@@ -401,3 +401,54 @@ socket/SysV IPC/loop 设备/mount 和少量信号语义，见 §5.1–5.14。
 - 之前那次正式测评因 RV panic 作废；提交目录里遗留的
   `sdcard-rv.img`/`sdcard-la.img` 已删除，重跑前不会再触发
   `gzip: ... already exists`。
+
+### 5.22 最终正式测评 eval16（HEAD 00a6c63）：Accpted，1273
+
+用户在 NVMA=6144 修复后重跑官方 docker 测评，结果：
+
+```
+{"verdict": "Accpted", "score": "1273", ...}
+LTP:  LA 665 TPASS / RV 660 TPASS  （净差 5）
+两个架构均 191/191 用例、10/10 组完成，0 panic
+```
+
+日志保留：
+
+- `/tmp/opencode/official_eval_16.log`（完整 stdout，802KB）
+- `/tmp/opencode/eval16_la_serial.txt` / `eval16_rv_serial.txt`
+- `/tmp/opencode/eval16_console.log`
+
+与 eval14（1237，LA 655 / RV 647）逐项对比：
+
+| 项目 | eval14 | eval16 | 变化 |
+|---|---:|---:|---:|
+| 总分 | 1237 | **1273** | **+36** |
+| LTP LA | 655 | **665** | +10 |
+| LTP RV | 647 | **660** | +13 |
+| basic-glibc-rv | 87 | 92 | +5 |
+| basic-musl-rv | 87 | 92 | +5 |
+| libcbench-glibc-rv | 22.22 | 30.40 | +8.18 |
+| libcbench-musl-rv | 21.0 | 25.24 | +4.24 |
+| libctest-musl-rv | 178 | 189 | +11 |
+
+LTP 逐项变化只有：
+
+```
+LA gettid02   1 -> 11
+RV gettid02   0 -> 11
+RV mmap03     0 -> 1
+RV mmapstress01 0 -> 1
+RV getdents01 3 passed/3 failed -> 3 passed/0 failed
+```
+
+没有新增差异或回归。剩余 8 个差异仍是：
+
+```
+LA 多: atof01 +1, clone04 +1, confstr01 +4, fptest01 +1, fptest02 +1
+RV 多: fstatfs02 +1, getdents01 +1, munmap02 +1
+净差 = 8 - 3 = 5
+```
+
+这些差异此前已用本机 Ubuntu 参照/测试二进制检查证明为浮点、测试二进制枚举
+（confstr01）和用户态 musl 差异，不是内核可修复项。NVMA=6144 之后
+libcbench-glibc/musl 的四个 pthread 压测全部通过，正式测评不再 panic。
