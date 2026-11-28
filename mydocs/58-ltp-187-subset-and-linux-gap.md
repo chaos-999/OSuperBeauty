@@ -313,3 +313,23 @@ socket/SysV IPC/loop 设备/mount 和少量信号语义，见 §5.1–5.14。
 **结论**：191 例列表相同、两边都完整跑完；剩余 8 TPASS（1.2%）中 6 个来自测试二进制/
 浮点/用户态 musl 差异（本机 Linux 同样如此），另 2 个（gettid02/mmap03）是 RV 线程栈
 与单测二进制特例，不属于 syscall 缺失。内核层面的对齐已经完成。
+
+### 5.19 eval14（1237）与 init 调试块移除（919e241）
+
+- **发现 `init-rv.c` 的 `main()` 里残留了 07:43 调试用的六用例块**
+  （`readlink01/prctl03/confstr01/setitimer01/mmap03/proc01`），每次 RV 启动都会先跑它：
+  `setitimer01` 会挂到框架 30s 超时并留下自旋子进程，白耗 ~30–60s 且污染串口。
+  `919e241` 已删除该块，启动直接进入完整 `test_pre`。
+- **eval14（official_eval_14.log，verdict Accpted，score 1237）**：
+  LA 191/191，**655 TPASS**；RV 191/191，**647 TPASS**（差 8）。
+- **gettid02 / mmap03 的确定性机理证据**（RV trap 诊断打印 + 页表/VMA）：
+  - `gettid02`：`LAZY pid=19 name=gettid02 va=3fdfefebf8 vma=1 prot=0` —— pthread 栈的
+    guard 页是 `PROT_NONE`，线程 sp 落到 guard 页，属 RV 线程栈布局下真实的 guard 缺页
+    SIGSEGV；LA 的栈布局/缺页路径不同，故 LA 只拿到 1 TPASS。
+  - `mmap03`：`LAZY pid=15/20 name=mmap03 va=3fdfeff000 vma=1 prot=4` ×8 +
+    `PF loop ... pc=40059e7c -> SIGSEGV` —— 测试在 USTACK 下映射 `PROT_EXEC` 文件页，
+    RV 的 mmap 游标没有让开父进程已继承的匿名 `data` VMA，exec 映射落在同一页，
+    `memset(data)` 写 PROT_EXEC 页失败并反复缺页直到看门狗。属 RV VMA 重叠/线程栈
+    处理的真实差异，需重做 RV mmap VMA 冲突检测与 clone 栈语义。
+  - 其余 6 个差异（confstr01/atof01/fptest01/02/clone04 + RV 多的三项）已用本机
+    Ubuntu 参照证明为测试二进制/浮点/用户态 musl 差异（见 §5.18），净差 8。
