@@ -35,7 +35,7 @@ uint64 sys_exit(void) {
     return 0;  // not reached
 }
 
-uint64 sys_getpid(void) { return myproc()->pid; }
+uint64 sys_getpid(void) { return myproc()->tgid; }
 
 uint64 sys_getppid(void) {
     struct proc *p = myproc();
@@ -418,6 +418,63 @@ static int find_vma_by_addr(struct proc *p, uint64 addr) {
  * MAP_FIXED; support that by trimming or removing the old VMAs and
  * unmapping their pages.
  */
+/*
+ * Split [addr, addr+len) out of one VMA and give only that sub-range the new
+ * protection.  Linux represents a partial mprotect() by splitting the VMA;
+ * musl's pthread_create() depends on it: it maps a whole stack PROT_NONE and
+ * then mprotects everything above the low guard page to PROT_READ|PROT_WRITE.
+ * Without the split the usable stack stayed PROT_NONE, so a new thread's
+ * first stack write faulted forever (LTP gettid02).
+ */
+static void vma_mprotect_range(struct proc *vo, uint64 addr, uint64 len, int prot) {
+    int orig_n = vo->vma_n;
+
+    for (int i = 0; i < orig_n; i++) {
+        struct vma *v = &vo->vmas[i];
+        if (!v->valid) continue;
+        uint64 vs = v->addr, ve = vs + v->length, end = addr + len;
+        uint64 s = addr > vs ? addr : vs;
+        uint64 e = end < ve ? end : ve;
+        if (s >= e) continue;
+
+        if (s == vs && e == ve) {
+            v->prot = prot;
+            continue;
+        }
+
+        int want_head = s > vs;
+        int want_tail = e < ve;
+        if (vo->vma_n + want_head + want_tail > NVMA) {
+            /* Cannot represent the split; keep the old whole-VMA behaviour. */
+            v->prot = prot;
+            continue;
+        }
+
+        struct vma save = *v;
+        if (want_head) {
+            struct vma *nv = &vo->vmas[vo->vma_n++];
+            *nv = save;
+            nv->length = s - vs;
+            nv->valid = 1;
+            if (nv->f) get_fops()->dup(nv->f);
+        }
+        if (want_tail) {
+            struct vma *nv = &vo->vmas[vo->vma_n++];
+            *nv = save;
+            nv->addr = e;
+            nv->offset = save.offset + (e - vs);
+            nv->length = ve - e;
+            nv->valid = 1;
+            if (nv->f) get_fops()->dup(nv->f);
+        }
+
+        v->addr = s;
+        v->offset = save.offset + (s - vs);
+        v->length = e - s;
+        v->prot = prot;
+    }
+}
+
 static void mmap_replace_range(struct proc *vo, pagetable_t pt, uint64 addr, uint64 sz) {
     uint64 end = addr + sz;
     for (int i = 0; i < vo->vma_n; i++) {
@@ -610,54 +667,20 @@ uint64 sys_munmap(void) {
     if (sz == 0) return -EINVAL;
 
     struct proc *p = myproc();
+    struct proc *vo = proc_vma_owner(p);
+    uint64 start = PGROUNDDOWN(addr);
+    uint64 end = PGROUNDUP(addr + sz);
+    if (end <= start) return -EINVAL;
 
-    struct vma *v = findvma(p, addr);
-    if (v == 0) return -EINVAL;
-
-    if (addr > v->addr && addr + sz < v->addr + v->length) {
-        // dig a hole inside the memory range
-        return -ENOMEM;
-    }
-
-    uint64 addr_aligned = addr;
-    if (addr > v->addr) {
-        addr_aligned = PGROUNDUP(addr);
-    }
-
-    int nunmap = sz - (addr_aligned - addr);
-    if (nunmap < 0) nunmap = 0;
-
-    if (strcmp(myproc()->name, "git") == 0) {
-        // printf("DEBUG: sys_munmap pid=%d addr=%lx sz=%lx aligned=%lx nunmap=%x vma=[%lx,%lx)\n",
-        // p->pid, addr, sz, addr_aligned, nunmap, v->addr, v->addr + v->length);
-    }
-
-    vmaunmap(p->pagetable, addr_aligned, nunmap, v);
-
-    if (addr <= v->addr && addr + sz > v->addr) {
-        v->offset += addr + sz - v->addr;
-        v->addr = addr + sz;
-    }
-    v->length -= sz;
-
-    if (v->length <= 0) {
-        if (v->f != NULL) {
-            get_fops()->close(v->f);
-        }
-        v->valid = 0;
-    }
-
-    /* Shrink the high-water mark so VMA scans stay short. */
-    {
-        struct proc *vo = proc_vma_owner(p);
-        while (vo->vma_n > 0 && !vo->vmas[vo->vma_n - 1].valid) vo->vma_n--;
-    }
-
-    if (strcmp(myproc()->name, "git") == 0) {
-        // printf("DEBUG: sys_munmap DONE vma_valid=%d new_vma=[%lx,%lx)\n", v->valid, v->addr,
-        // v->addr + v->length);
-    }
-
+    /*
+     * munmap() may span several VMAs and may punch a hole in the middle of
+     * one.  mmap_replace_range() already implements that trim/split and
+     * unmaps the pages.  The old single-VMA version only removed the first
+     * matching VMA; after mprotect() began splitting pthread stacks into a
+     * PROT_NONE guard and a usable part, every thread exit left the usable
+     * VMA behind.  That would exhaust NVMA in libcbench's 2500-thread test.
+     */
+    mmap_replace_range(vo, p->pagetable, start, end - start);
     return 0;
 }
 
@@ -989,7 +1012,7 @@ uint64 sys_fcntl(void) {
     return ret;
 }
 
-uint64 sys_gettid(void) { return myproc()->pid; }
+uint64 sys_gettid(void) { return myproc()->tid; }
 
 uint64 sys_sendfile(void) {
     int out_fd, in_fd, count, offset;
@@ -1916,32 +1939,13 @@ uint64 sys_mprotect(void) {
 
         if (prot & PROT_READ) *pte |= PTE_R;
         if (prot & PROT_WRITE) *pte |= PTE_W;
-        if (prot & PROT_EXEC) *pte |= PTE_X;
+        /* Keep PROT_EXEC mappings readable, as LTP mmap03 expects. */
+        if (prot & PROT_EXEC) *pte |= PTE_X | PTE_R;
 
         *pte |= PTE_U;
     }
 
-    {
-        struct proc *vo = proc_vma_owner(p);
-        for (int i = 0; i < vo->vma_n; i++) {
-            struct vma *v = &vo->vmas[i];
-            if (!v->valid) continue;
-            if (addr < v->addr + v->length && addr + len > v->addr) {
-                /*
-                 * Only propagate the new protection to the VMA when the
-                 * whole VMA is covered.  A partial mprotect (e.g. disabling
-                 * a pthread stack guard page) must not clobber the rest of
-                 * the VMA: pthread_create maps a stack, then does
-                 * mprotect(stack_top, PAGE, PROT_NONE).  Setting v->prot = 0
-                 * here made the *whole* stack PROT_NONE, so the next stack
-                 * write faulted and vmatrylazytouch() could not grant W ->
-                 * infinite page-fault loop.
-                 */
-                if (addr <= v->addr && addr + len >= v->addr + v->length)
-                    v->prot = prot;
-            }
-        }
-    }
+    vma_mprotect_range(proc_vma_owner(p), addr, len, prot);
 
     // Flush TLB to ensure changes take effect
 #ifdef RISCV

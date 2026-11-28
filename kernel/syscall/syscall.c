@@ -330,7 +330,16 @@ void syscall(void) {
         // Use num to lookup the system call function for num, call it,
         // and store its return value in p->trapframe->a0
         uint64 ret = syscalls[num]();
-        p->trapframe->a0 = ret;
+        /*
+         * rt_sigreturn restores the interrupted user context (including the
+         * syscall return value in a0) from the signal frame.  Writing the
+         * sigreturn syscall's own return value here would clobber it with 0:
+         * a wait() that was interrupted by SIGALRM then looked like it
+         * returned 0, which made LTP mmapstress01 abort with "unknown child
+         * pid 0".  Linux ignores rt_sigreturn's return value for this reason.
+         */
+        if (num != SYS_rt_sigreturn)
+            p->trapframe->a0 = ret;
     } else {
         printf("%d %s: unknown sys call %d\n", p->pid, p->name, num);
         p->trapframe->a0 = -ENOSYS;

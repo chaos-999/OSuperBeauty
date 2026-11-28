@@ -140,6 +140,16 @@ found:
     p->tid = p->pid;  // Default: tid == pid
     p->leader = p;    // Default: own thread group
     p->state = USED;
+    /*
+     * A recycled proc slot must not inherit the previous process's
+     * page-fault watchdog state.  Otherwise the first fault of the new
+     * process can look like the 9th identical fault and is converted to
+     * SIGSEGV without ever calling vmatrylazytouch() (LTP mmapstress01:
+     * a mapper child inherited fault_cnt > 8 and died on its first read).
+     */
+    p->fault_va = 0;
+    p->fault_sepc = 0;
+    p->fault_cnt = 0;
     p->clear_child_tid = 0;
     p->robust_list_head = 0;
     p->heap_start = 0;
@@ -906,7 +916,6 @@ int waitpid(int target_pid, uint64 wstatus_addr, int options) {
                         freeproc(pp);
                         release(&pp->lock);
                         release(&wait_lock);
-
                         return found_pid;
                     }
 

@@ -78,7 +78,7 @@ int vmatrylazytouch(uint64 va) {
                 return 0;  /* PROT_NONE: genuine fault, do not loop */
             if (v->prot & PROT_READ) *pte |= PTE_R;
             if (v->prot & PROT_WRITE) *pte |= PTE_W;
-            if (v->prot & PROT_EXEC) *pte |= PTE_X;
+            if (v->prot & PROT_EXEC) *pte |= PTE_X | PTE_R;
             *pte |= PTE_U;
             sfence_vma();
             return 1;
@@ -112,7 +112,13 @@ int vmatrylazytouch(uint64 va) {
     int perm = PTE_U;
     if (v->prot & PROT_READ) perm |= PTE_R;
     if (v->prot & PROT_WRITE) perm |= PTE_W;
-    if (v->prot & PROT_EXEC) perm |= PTE_X;
+    /*
+     * RISC-V PTEs can encode execute-only pages, but LTP's mmap03 maps a
+     * file with PROT_EXEC and then reads it with memcmp(); Linux userland
+     * (and our LoongArch build) makes such a mapping readable.  Without
+     * PTE_R the read faults forever because the VMA still says PROT_EXEC.
+     */
+    if (v->prot & PROT_EXEC) perm |= PTE_X | PTE_R;
 
     if (mappages(p->pagetable, va_aligned, PGSIZE, (uint64)pa, perm) != 0) {
         kfree(pa);

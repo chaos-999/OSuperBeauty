@@ -333,3 +333,48 @@ socket/SysV IPC/loop 设备/mount 和少量信号语义，见 §5.1–5.14。
     处理的真实差异，需重做 RV mmap VMA 冲突检测与 clone 栈语义。
   - 其余 6 个差异（confstr01/atof01/fptest01/02/clone04 + RV 多的三项）已用本机
     Ubuntu 参照证明为测试二进制/浮点/用户态 musl 差异（见 §5.18），净差 8。
+
+### 5.20 最后 3 个 RV 差异的真实根因与修复（2026-11-28）
+
+§5.19 把 mmap03 归因于 VMA 重叠/继承，这个判断不完整。用测试二进制反汇编
+（`mmap03` 的 `memcmp(dummy, addr)` 读 `PROT_EXEC` 映射）+ trap 诊断确认了三个
+真正的内核 bug，并已修复：
+
+1. **mmap03：PROT_EXEC 页缺 PTE_R**
+   - RV 懒缺页只按 `v->prot` 给 `PTE_X`，RISC-V 的 execute-only 页在 `memcmp`
+     读取时反复缺页，watchdog 最后才发 SIGSEGV。
+   - 修复：`vmatrylazytouch()` 和 `mprotect()` 中 `PROT_EXEC` 同时授予 `PTE_R`
+     （与 LoongArch/本项目用户态语义一致）。
+2. **gettid02：部分 mprotect 没有拆分 VMA + getpid/gettid 语义错误**
+   - musl `pthread_create()` 先 `mmap(PROT_NONE)` 整个栈，再对 guard 以上的
+     可用区做部分 mprotect；旧代码只在整段 VMA 被覆盖时更新 `v->prot`，可用栈
+     区一直是 `PROT_NONE`，线程第一次压栈就 SIGSEGV。
+   - 修复：新增 `vma_mprotect_range()`，按 Linux 语义把部分 mprotect 拆成
+     head / middle / tail 三个 VMA，并复制文件引用。
+   - 同时 `getpid()` 返回 `tgid`、`gettid()` 返回 `tid`（原来都返回 `p->pid`，
+     10 个线程全部 TFAIL）。
+3. **mmapstress01：进程槽复用未清零缺页计数 + rt_sigreturn 覆盖 a0**
+   - `allocproc()` 复用时保留上一个进程的 `fault_cnt`，新进程第一次缺页就被
+     watchdog 当成第 9 次相同缺页，直接 SIGSEGV；修复为清零
+     `fault_va/fault_sepc/fault_cnt`。
+   - SIGALRM 在 `wait()` 返回后投递时，`sys_rt_sigreturn()` 恢复的 `a0` 被
+     `syscall()` 用 sigreturn 自己的返回值 0 覆盖，用户态看到 `wait()` 返回 0，
+     报 `unknown child pid 0`；修复为 `rt_sigreturn` 不回写 `a0`。
+4. **munmap 范围化（避免 mprotect 拆分的回归）**
+   - mprotect 拆分后，旧 `sys_munmap()` 只处理第一个 VMA，线程栈每次退出都会
+     留下 usable 那一半 VMA；libcbench 的 2500 线程测试会耗尽 `NVMA`。
+   - 改为 `mmap_replace_range()` 按范围 unmap/裁剪/拆分，munmap02 仍为 1 TPASS。
+
+**验证（小规模、逐项对比 eval14）**
+
+- 4 用例隔离复测（连续两次）：mmap03=1，gettid02=11，mmapstress01=1；
+  clone04 仍为 TBROK（LTP 20240524 tag `musl-git fa4a8abd`，本机 Ubuntu 参照
+  同样失败，不是内核差异）。
+- 20 个 mmap/mprotect/munmap/clone/gettid 用例与 eval14 逐项对比：
+  只有 mmap03 +1、gettid02 +11、mmapstress01 +1，其余 17 项全部不变
+  （munmap02 仍 1，mprotect01 仍 1+2TFAIL，mmap04/08 等仍保持原状）。
+- LA 3 用例冒烟：mmap03=1，gettid02=11，mmapstress01=1，0 panic/0 PF loop。
+- `make clean && make all` 成功；RV/LA 内核均为 fullflow=1、无调试打印，
+  init 仍为完整 191 例。按用户要求不再跑大规模回归；正式测评由用户执行。
+  预计 LTP：LA 655 / RV 650（净差 5，全部为已证明的测试二进制/浮点/用户态
+  musl 差异）。
