@@ -473,23 +473,6 @@ int main() {
     }
     dup(0);  // stdout
     dup(0);  // stderr
-    {
-        chdir("/musl/ltp/testcases/bin");
-        const char *ts[] = {"readlink01", "prctl03", "confstr01", "setitimer01", "mmap03", "proc01"};
-        for (int ti = 0; ti < 6; ti++) {
-            int p = fork();
-            if (p == 0) {
-                char *av[] = {(char *)ts[ti], 0};
-                char *ev[] = {"LD_LIBRARY_PATH=/musl/lib", 0};
-                execve((char *)ts[ti], av, ev);
-                exit(127);
-            }
-            int st = 0; wait(&st);
-            printf("TEST_DONE %s st=%x\n", ts[ti], st);
-        }
-        chdir("/");
-    }
-
     // --- 创建 /tmp 目录 ---
     mkdirat(AT_FDCWD, "/tmp", 0777);
     mkdirat(AT_FDCWD, "/lib", 0755);
