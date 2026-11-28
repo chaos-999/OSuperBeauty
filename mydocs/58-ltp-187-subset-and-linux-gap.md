@@ -272,3 +272,24 @@ socket/SysV IPC/loop 设备/mount 和少量信号语义，见 §5.1–5.14。
 - busybox：LA 53/53，RV 51/53
 - 残留小差异：chmod01 受 30s 看门狗影响 LA 偶尔只跑到 16/32；confstr01(4)、
   setitimer01(3)、prctl03/readlink01/symlink01(各2) 等 RV 单独失败。
+
+### 5.17 第四轮：看门狗/输出收集/setitimer/NPROC（eval13，score 1237）
+
+- **chmod01 被 30s 看门狗截断**：LA 只跑到 16/32。默认看门狗 30s→75s（mem02 单独 240s：
+  它的 15000 次 valloc 在 TCG 下要几分钟），两边 chmod01 都完整 32。
+- **readlink01/prctl03 在 RV 上 0 结果**：测试的 fork 子进程在父进程退出后才 flush 输出，
+  runner 读文件太早。每个用例结束后 200ms settle 再读，两边都恢复 2 TPASS。
+- **setitimer01**：只实现了一次性 timer、old value 全零。补上 it_interval 的保存/返回和
+  周期重装后，两边都从 3/0 变成 **7 TPASS**。
+- **NPROC 512→256**：PHYSTOP 修复后 fork 失败的原因是内存(51MB)而不是 proc 表；512 让
+  每次切换扫描 512 个 proc，libctest/libcbench 的 pthread 组慢 2-4 倍。256 足够
+  （pipe11 的 50 个并发子进程 + 残留），RV 组阶段从 ~40 分钟降到 ~35 分钟。
+
+**eval13（official_eval_13.log，verdict Accpted，score 1237）**：
+- LA：191/191，**654 TPASS**；RV：191/191，**646 TPASS**（差 8，1.2%）
+- 已对齐：chmod01 32/32、pipe11 70/70、setitimer01 7/7、readlink01 2/2、prctl03 2/2、mem02 5/5
+- 残留 8 个 TPASS：confstr01(4)、atof01(1)、clone04/fptest01/fptest02/gettid02/mmap03/prctl01
+  各 1（RV 为 0），RV 侧多 fstatfs02/getdents01/munmap02 各 1。属于架构/浮点/单个
+  syscall 语义差异，不影响两边跑同一份 191 例。
+- 总耗时 57 分钟：~40 分钟是 basic/libctest/libcbench/lua 基准组（`b_stdio_putcgetc`
+  单次 LA 98s、RV 78s，TCG 固定开销），LTP 阶段 LA ~10 分钟、RV ~19 分钟。
