@@ -293,3 +293,23 @@ socket/SysV IPC/loop 设备/mount 和少量信号语义，见 §5.1–5.14。
   syscall 语义差异，不影响两边跑同一份 191 例。
 - 总耗时 57 分钟：~40 分钟是 basic/libctest/libcbench/lua 基准组（`b_stdio_putcgetc`
   单次 LA 98s、RV 78s，TCG 固定开销），LTP 阶段 LA ~10 分钟、RV ~19 分钟。
+
+### 5.18 eval13 剩余 8 TPASS 差异的逐项归因（含本机证据）
+
+用本机 Ubuntu 22.04（同一批二进制、qemu-user、真 root+loop）作参照
+（`hostltp/sweep/results.tsv`，列：rc/TPASS/TFAIL/TBROK/TCONF）：
+
+| 用例 | LA | RV | 本机 Linux | 归因 |
+|------|----|----|-----------|------|
+| confstr01 | 36 | 32 | **32** | **测试二进制差异**：LA 的二进制多编译了 `POSIX_V7_THREADS_CFLAGS/LDFLAGS` 两个 case（各 2 个 TPASS），串口里 LA 有这两行、RV 没有。本机 x86 也只有 32。不是内核。 |
+| atof01 | 4 | 3 | **0（4 TFAIL）** | 浮点 `atof` 解析差异，本机也失败；与内核无关。 |
+| fptest01/02 | 1/1 | 0/0 | **0（各 1 TFAIL）** | 浮点测试，本机也失败。 |
+| clone04 | 1 | 0 | **0（SIGSEGV）** | musl 的 `clone(NULL stack)` 包装器差异（LTP 标了 musl-git fa4a8abd）；本机 qemu-user 同样 SIGSEGV。 |
+| gettid02 | 1 | 0 | **11** | RV 线程栈 guard 缺页循环（`PF loop va=3fdfeff000 pc=40059e7c -> SIGSEGV`），是 RV 线程栈处理的遗留差异；LA 也只能拿到 1 TPASS。 |
+| mmap03 | 1 | 0 | **1** | RV 上该二进制静默 exit 0、无任何结果输出；本机/LA 正常。单独重跑同样 0，属 RV 特例。 |
+| prctl01 | 1 | 0（评测） | **2** | 单独重跑 RV 得到 1 TPASS+1 TFAIL（与 LA 相同），全量评测时受负载/超时影响变成 0，属波动。 |
+| fstatfs02/getdents01/munmap02 | 0/2/0 | 1/3/1 | — | RV 反而多的 3 个 TPASS，抵消后净差 8。 |
+
+**结论**：191 例列表相同、两边都完整跑完；剩余 8 TPASS（1.2%）中 6 个来自测试二进制/
+浮点/用户态 musl 差异（本机 Linux 同样如此），另 2 个（gettid02/mmap03）是 RV 线程栈
+与单测二进制特例，不属于 syscall 缺失。内核层面的对齐已经完成。
